@@ -27,9 +27,9 @@ complete userspace. C and Rust backend integration is pending.
 
 ```sh
 git submodule update --init --recursive
-bun install --ignore-scripts
-bun run check
-bun test
+npm install
+npm run build
+npm test
 ```
 
 ## Use
@@ -47,6 +47,7 @@ to `dist/wasm/` when compilation succeeds.
 ## Documentation
 
 - [Implementation roadmap](docs/roadmap.md)
+- [Strict code checks](docs/checks.md)
 
 ## Licence
 

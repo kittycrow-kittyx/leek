@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: npm install --package-lock=false --no-audit --no-fund
+
+      - name: Build with strict Code Guards
+        run: npm run build
+
+      - name: Upload Code Guards report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: leek-code-guards
+          path: logs/code-guards.json
+          if-no-files-found: ignore
+
+      - name: Unit tests
+        run: npm test
