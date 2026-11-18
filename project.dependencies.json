@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "dependencies": [
+    {
+      "name": "Baguette",
+      "repository": "kittycrow-kittyx/baguette",
+      "path": "baguette",
+      "commit": "bea3c8ad872d52aad285c08d079945cf8c594edb",
+      "relationship": "build",
+      "direct": true,
+      "updatePolicy": "pull-request"
+    },
+    {
+      "name": "Croissant",
+      "repository": "kittycrow-kittyx/croissant",
+      "path": "croissant",
+      "commit": "e2a611c97e4bc2f749560234fc4584d4cdb8b8f0",
+      "relationship": "build",
+      "direct": true,
+      "updatePolicy": "pull-request"
+    },
+    {
+      "name": "Crust",
+      "repository": "kittycrow-kittyx/crust",
+      "path": "crust",
+      "commit": "c093931a18ff4d565ba7fac32bd445a214820376",
+      "relationship": "build",
+      "direct": true,
+      "updatePolicy": "pull-request"
+    }
+  ]
+}

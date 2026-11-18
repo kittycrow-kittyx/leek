@@ -1,0 +1,27 @@
+{
+  "name": "@kitty-crow/leek",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "type": "module",
+  "description": "Leek Extends the Environment of KittyX. Ahead-of-time compiler for mikuOS.",
+  "license": "MIT",
+  "bin": {
+    "leek": "src/cli.ts"
+  },
+  "scripts": {
+    "leek": "bun src/cli.ts",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "typescript": "5.9.3",
+    "assemblyscript": "0.28.19",
+    "binaryen": "130.0.0-nightly.20260609"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  }
+}
