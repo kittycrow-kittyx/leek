@@ -14,11 +14,8 @@ export interface LoweredProject {
 export function stageSource(source: string, entry: string, work: string): LoweredProject {
   const original = resolve(work, "original.json");
   createProject(source, [entry], original);
-  const parsed = ts.getParsedCommandLineOfConfigFile(original, {}, {
-    ...ts.sys,
-    onUnRecoverableConfigFileDiagnostic: diagnostic => fail([diagnostic])
-  }) ?? null;
-  if (!parsed) throw new Error("Cannot read staged compiler configuration");
+  const config = ts.readJsonConfigFile(original, ts.sys.readFile);
+  const parsed = ts.parseJsonSourceFileConfigFileContent(config, ts.sys, work, {}, original);
   if (parsed.errors.length) fail(parsed.errors);
   const program = ts.createProgram(parsed.fileNames, parsed.options);
   const errors = ts.getPreEmitDiagnostics(program).filter(d => d.category === ts.DiagnosticCategory.Error);
