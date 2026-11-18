@@ -40,21 +40,21 @@ function checkPin(checkout: string, commit: string): string {
   return checkout;
 }
 
-export function requireBake(baguette: string): string {
-  const entry = execFileSync("git", ["-C", baguette, "ls-tree", "HEAD", "--", "vendor/bake"], { encoding: "utf8" }).trim();
+export function requireBake(compiler: string): string {
+  const entry = execFileSync("git", ["-C", compiler, "ls-tree", "HEAD", "--", "vendor/bake"], { encoding: "utf8" }).trim();
   const match = /^160000 commit ([a-f0-9]{40})\tvendor\/bake$/.exec(entry);
-  if (!match?.[1]) throw new Error("Baguette does not pin Bake");
-  return checkPin(resolve(baguette, "vendor", "bake"), match[1]);
+  if (!match?.[1]) throw new Error("Compiler does not pin Bake");
+  return checkPin(resolve(compiler, "vendor", "bake"), match[1]);
 }
 
-export function createProject(source: string, entries: readonly string[], project: string): void {
+export function createProject(source: string, entries: readonly string[], project: string, rootDir = resolve(source, "src")): void {
   if (!entries.length) throw new Error("At least one mikuOS entry is required");
   json(project, {
     extends: resolve(source, "tsconfig.json"),
     compilerOptions: {
       noEmit: true, incremental: false, composite: false,
       declaration: false, declarationMap: false, sourceMap: false,
-      rootDir: resolve(source, "src")
+      rootDir
     },
     files: entries, include: [], exclude: []
   });

@@ -1,12 +1,10 @@
 # Compilation
 
-Leek uses Baguette's pinned Bake for source analysis and lowering. Baguette
-consumes the lowered TypeScript for WebAssembly generation.
+Leek accepts a mikuOS TypeScript project and selects a target via
+`--target=wasm|clang|rust`. Its source passes operate on an isolated copy of
+the resolved programme. Numeric predicates are lowered before the inherited
+Bake passes. Each target uses the Bake revision pinned by its compiler.
 
-Source analysis and lowering support WebAssembly, C and Rust. Native
-backend integration remains pending. The source project is supplied by the
-caller.
-
-Userspace compilation requires support for TypeScript collections, strings,
-regular expressions, exceptions, closures and asynchronous operations.
-Runtime bindings connect compiled userspace to the selected kernel.
+C and Rust emission use the inherited compiler functions. WAT emission
+requires an importable Baguette emitter. Collections, strings, exceptions,
+closures, asynchronous operations and kernel bindings require further lowering.

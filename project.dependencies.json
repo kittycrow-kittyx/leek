@@ -14,7 +14,7 @@
       "name": "Croissant",
       "repository": "kittycrow-kittyx/croissant",
       "path": "croissant",
-      "commit": "e2a611c97e4bc2f749560234fc4584d4cdb8b8f0",
+      "commit": "806eae95e48fe0c7637eb202ad578bc4614f40c8",
       "relationship": "build",
       "direct": true,
       "updatePolicy": "pull-request"
@@ -23,7 +23,7 @@
       "name": "Crust",
       "repository": "kittycrow-kittyx/crust",
       "path": "crust",
-      "commit": "c093931a18ff4d565ba7fac32bd445a214820376",
+      "commit": "ee89397fa8e2a6b6b2bf1a817a9c870e50b458ef",
       "relationship": "build",
       "direct": true,
       "updatePolicy": "pull-request"
