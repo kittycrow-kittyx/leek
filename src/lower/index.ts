@@ -10,12 +10,15 @@ export interface LoweredProject {
   files: number;
 }
 
+/** Check the original graph first so lowering never copies invalid or out-of-tree source into the compiler workspace. */
 export function stageSource(source: string, entry: string, work: string): LoweredProject {
   const original = resolve(work, "original.json");
   createProject(source, [entry], original);
-  const config = ts.readConfigFile(original, ts.sys.readFile);
-  if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
-  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, work, {}, original);
+  const parsed = ts.getParsedCommandLineOfConfigFile(original, {}, {
+    ...ts.sys,
+    onUnRecoverableConfigFileDiagnostic: diagnostic => fail([diagnostic])
+  }) ?? null;
+  if (!parsed) throw new Error("Cannot read staged compiler configuration");
   if (parsed.errors.length) fail(parsed.errors);
   const program = ts.createProgram(parsed.fileNames, parsed.options);
   const errors = ts.getPreEmitDiagnostics(program).filter(d => d.category === ts.DiagnosticCategory.Error);

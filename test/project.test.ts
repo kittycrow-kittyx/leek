@@ -22,9 +22,15 @@ test("only real mikuOS implementation entries are selected", () => {
     assert.throws(() => sourceEntry(root, entry));
     const project = join(root, "build", "tsconfig.json");
     createProject(root, [entry], project);
-    const config = JSON.parse(readFileSync(project, "utf8"));
-    assert.deepEqual(config.files, [entry]);
-    assert.deepEqual(config.include, []);
-    assert.equal(config.compilerOptions.noEmit, true);
+    const expected = {
+      extends: join(root, "tsconfig.json"),
+      compilerOptions: {
+        noEmit: true, incremental: false, composite: false,
+        declaration: false, declarationMap: false, sourceMap: false,
+        rootDir: join(root, "src")
+      },
+      files: [entry], include: [], exclude: []
+    };
+    assert.equal(readFileSync(project, "utf8"), JSON.stringify(expected, null, 2) + "\n");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

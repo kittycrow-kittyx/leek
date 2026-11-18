@@ -34,6 +34,7 @@ async function main(): Promise<void> {
 
 try { await main(); }
 catch (error) {
-  console.error("Leek: " + (error instanceof Error ? error.message : String(error)));
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "Unexpected failure";
+  console.error("Leek: " + message);
   process.exitCode = 1;
 }

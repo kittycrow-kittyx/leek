@@ -24,12 +24,32 @@ export function sourceEntry(source: string, entry: string): string {
   return candidate;
 }
 
-interface Dependency { path: string; commit: string; repository: string }
+type JsonValue = null | boolean | number | string | JsonValue[] | JsonRecord;
+interface JsonRecord { [key: string]: JsonValue }
+
+// JSON without a reviver has only these value forms; validate the dependency
+// record before using a path or revision from the file.
+const decode: (text: string) => JsonValue = JSON.parse;
+function record(value: JsonValue): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function list(value: JsonValue): value is JsonValue[] {
+  return Array.isArray(value);
+}
+
 export function requirePin(root: string, name: string): string {
-  const lock = JSON.parse(readFileSync(resolve(root, "project.dependencies.json"), "utf8")) as { dependencies: Dependency[] };
-  const item = lock.dependencies.find(dep => dep.path === name);
-  if (!item || !/^[a-f0-9]{40}$/.test(item.commit)) throw new Error("Missing immutable pin for " + name);
-  return checkPin(resolve(root, item.path), item.commit);
+  const lock = decode(readFileSync(resolve(root, "project.dependencies.json"), "utf8"));
+  if (!record(lock)) throw new Error("Invalid dependency lock");
+  const dependencies = lock["dependencies"] ?? null;
+  if (!list(dependencies)) throw new Error("Invalid dependency list");
+  for (const item of dependencies) {
+    if (!record(item)) continue;
+    if ((item["path"] ?? null) !== name) continue;
+    const commit = item["commit"] ?? null;
+    if (typeof commit !== "string" || !/^[a-f0-9]{40}$/.test(commit)) break;
+    return checkPin(resolve(root, name), commit);
+  }
+  throw new Error("Missing immutable pin for " + name);
 }
 
 function checkPin(checkout: string, commit: string): string {
@@ -42,9 +62,8 @@ function checkPin(checkout: string, commit: string): string {
 
 export function requireBake(compiler: string): string {
   const entry = execFileSync("git", ["-C", compiler, "ls-tree", "HEAD", "--", "vendor/bake"], { encoding: "utf8" }).trim();
-  const match = /^160000 commit ([a-f0-9]{40})\tvendor\/bake$/.exec(entry);
-  if (!match?.[1]) throw new Error("Compiler does not pin Bake");
-  return checkPin(resolve(compiler, "vendor", "bake"), match[1]);
+  if (!/^160000 commit [a-f0-9]{40}\tvendor\/bake$/.test(entry)) throw new Error("Compiler does not pin Bake");
+  return checkPin(resolve(compiler, "vendor", "bake"), entry.slice(14, 54));
 }
 
 export function createProject(source: string, entries: readonly string[], project: string, rootDir = resolve(source, "src")): void {

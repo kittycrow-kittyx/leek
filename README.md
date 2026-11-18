@@ -46,6 +46,7 @@ to `dist/wasm/` when compilation succeeds.
 
 ## Documentation
 
+- [Module documentation](docs/index.md)
 - [Implementation roadmap](docs/roadmap.md)
 - [Strict code checks](docs/checks.md)
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ function lowered(text: string): string {
     const file = join(root, "source.ts");
     writeFileSync(file, text);
     const programme = ts.createProgram([file], { target: ts.ScriptTarget.ES2022, strict: true, types: [] });
-    const source = programme.getSourceFile(file);
+    const source = programme.getSourceFile(file) ?? null;
     assert.ok(source);
     return lowerNumeric(source, programme.getTypeChecker());
   } finally {
@@ -26,10 +27,11 @@ test("numeric predicates retain their semantics at floating-point boundaries", (
   assert.ok(!output.includes("Number.is"));
   // The emitted test fixture is executed only in the test runner.
   const code = ts.transpileModule(output, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const check = new Function(code + "\nreturn check;")() as (n: number) => boolean[];
-  for (const n of [NaN, Infinity, -Infinity, -0, 0, 0.5, -0.5, 42, -42, Number.MAX_VALUE, Number.MIN_VALUE, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1]) {
-    assert.deepEqual(check(n), [Number.isNaN(n), Number.isFinite(n), Number.isInteger(n), Number.isSafeInteger(n)]);
-  }
+  const values = [NaN, Infinity, -Infinity, -0, 0, 0.5, -0.5, 42, -42, Number.MAX_VALUE, Number.MIN_VALUE, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1];
+  const literals = values.map(n => Object.is(n, -0) ? "-0" : String(n)).join(", ");
+  const actual = execFileSync(process.execPath, ["-e", code + "\nconsole.log(JSON.stringify([" + literals + "].map(check)));"], { encoding: "utf8" }).trim();
+  const expected = values.map(n => [Number.isNaN(n), Number.isFinite(n), Number.isInteger(n), Number.isSafeInteger(n)]);
+  assert.equal(actual, JSON.stringify(expected));
 });
 
 test("locally shadowed Number and non-numeric input remain unchanged", () => {
