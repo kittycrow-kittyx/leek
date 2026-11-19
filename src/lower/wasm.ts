@@ -17,13 +17,15 @@ const operators = new Map<ts.SyntaxKind, string>([
 ]);
 
 function librarySymbol(symbol: ts.Symbol | null): boolean {
-  const declarations = symbol?.declarations ?? [];
+  if (symbol === null) return false;
+  const declarations = symbol.declarations ?? [];
   return declarations.length > 0 && declarations.every(decl => /(?:^|[\\/])lib\.[^\\/]+\.d\.ts$/.test(decl.getSourceFile().fileName));
 }
 
 function arrayName(node: ts.Expression, checker: ts.TypeChecker): string | null {
   const symbol = checker.getTypeAtLocation(node).getSymbol() ?? null;
-  const name = symbol?.getName() ?? "";
+  if (symbol === null) return null;
+  const name = symbol.getName();
   return typedArrays.has(name) && librarySymbol(symbol) ? name : null;
 }
 
