@@ -16,8 +16,8 @@ test("explicit byte-array arguments activate the managed byte ABI", () => {
     assert.deepEqual(result.abiTypes, { Uint8Array: "number", LeekByteIndex: "number", LeekByteValue: "number" });
     assert.deepEqual(result.typeAliases, { LeekByteIndex: "i32", LeekByteValue: "u8" });
     const bridge = readFileSync(join(root, "source", "__leek_byte_abi.ts"), "utf8");
-    assert.match(bridge, /roots.push\(bytes\)/);
-    assert.match(bridge, /roots.splice\(slot, 1\)/);
+    assert.match(bridge, /roots.add\(bytes\)/);
+    assert.match(bridge, /roots.delete\(bytes\)/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

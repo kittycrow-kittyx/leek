@@ -28,12 +28,14 @@ jobs:
         run: bun run guards
       - name: Type-check source
         run: bun run check
+      - name: Cross-repository reuse
+        run: bun run guards:reuse
       - name: Upload Code Guards report
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: leek-code-guards
-          path: logs/code-guards.json
+          path: logs/code-guards*.json
           if-no-files-found: ignore
       - name: Unit tests
         run: bun run test

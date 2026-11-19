@@ -10,4 +10,6 @@
 
 The ABI reference is an AssemblyScript object address, not a byte buffer address. Exported functions require live references from the same instance. References expire on release. The host is trusted.
 
+The bridge roots live arrays in AssemblyScript's existing Set implementation. Membership and release use Set.has and Set.delete; setting a byte does not scan the complete root collection. The incremental runtime traces rooted arrays through the set.
+
 Supported boundary types: scalar values and explicit Uint8Array parameters. Unsupported: other reference types, returned reference ownership, function expressions and bulk transfers.

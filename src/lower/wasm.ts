@@ -4,17 +4,18 @@ import ts from "typescript";
 import { nativeVariable } from "../../baguette/src/ast.ts";
 import type { LoweredProject } from "./index.ts";
 import { numericCall } from "./numeric.ts";
+import { arrayType, integerOperation, integerStorage, integerValue, nativeWidths, signed, unsigned, unwrap } from "./integers.ts";
+import { lowerArrayLoop } from "./loops.ts";
 
-const signed = "LeekNativeI32";
-const unsigned = "LeekNativeU32";
 const intrinsicFile = "__leek_wasm_intrinsics.ts";
 
-// TypeScript reference for Baguette’s native mulU32 intrinsic. Bake checks this
-// module; Baguette omits its body and resolves the call to its pinned prelude.
+// Bake checks these reference contracts; Baguette omits their bodies and uses
+// its pinned native prelude and AssemblyScript standard library instead.
 export const multiplyReference = "export function mulU32(left: number, right: number): number { return Math.imul(left, right) >>> 0; }\n";
-
-// F64 is supplied by AssemblyScript. This reference exists only for TypeScript
-// checking and source-level tests; no class or predicate body is emitted.
+export const integerReference = `export class NativeMath {
+  static imul(left: number, right: number): number { return Math.imul(left, right); }
+}
+`;
 export const floatReference = `export class F64 {
   static isNaN(value: number): boolean { return Number.isNaN(value); }
   static isFinite(value: number): boolean { return Number.isFinite(value); }
@@ -22,171 +23,117 @@ export const floatReference = `export class F64 {
   static isSafeInteger(value: number): boolean { return Number.isSafeInteger(value); }
 }
 `;
-const typedArrays = new Set(["Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array", "Int32Array", "Uint32Array", "Float32Array", "Float64Array"]);
-const operators = new Map<ts.SyntaxKind, string>([
-  [ts.SyntaxKind.CaretToken, "xor"],
-  [ts.SyntaxKind.AmpersandToken, "and"],
-  [ts.SyntaxKind.BarToken, "or"],
-  [ts.SyntaxKind.LessThanLessThanToken, "shl"],
-  [ts.SyntaxKind.GreaterThanGreaterThanToken, "shr"],
-  [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, "ushr"]
-]);
 
-function librarySymbol(symbol: ts.Symbol | null): boolean {
-  if (symbol === null) return false;
-  const declarations = symbol.declarations ?? [];
-  // Ambient library augmentations add declarations to the same built-in symbol.
-  return declarations.some(decl => /(?:^|[\\/])lib\.[^\\/]+\.d\.ts$/.test(decl.getSourceFile().fileName));
-}
-
-function arrayName(node: ts.Expression, checker: ts.TypeChecker): string | null {
-  const symbol = checker.getTypeAtLocation(node).getSymbol() ?? null;
-  if (symbol === null) return null;
-  const name = symbol.getName();
-  return typedArrays.has(name) && librarySymbol(symbol) ? name : null;
-}
-
-function numberLike(node: ts.Expression, checker: ts.TypeChecker): boolean {
-  return Boolean(checker.getTypeAtLocation(node).flags & ts.TypeFlags.NumberLike);
-}
-
-function operation(node: ts.Node, checker: ts.TypeChecker): string | null {
-  if (ts.isBinaryExpression(node) && numberLike(node.left, checker) && numberLike(node.right, checker)) {
-    return operators.get(node.operatorToken.kind) ?? null;
-  }
-  if (!ts.isCallExpression(node) || node.arguments.length !== 2 || !ts.isPropertyAccessExpression(node.expression)) return null;
-  const member = node.expression;
-  if (!ts.isIdentifier(member.expression) || member.expression.text !== "Math" || member.name.text !== "imul") return null;
-  if (!librarySymbol(checker.getSymbolAtLocation(member.expression) ?? null)) return null;
-  return node.arguments.every(arg => numberLike(arg, checker) && !ts.isSpreadElement(arg)) ? "imul" : null;
-}
-
-function integerHelpers(names: Map<string, string>, toUnsigned: string): string {
-  const body: string[] = [];
-  if (!names.size) return "";
-  body.push(`function ${toUnsigned}(value: number): number {
-    if (value !== value || value > 1.7976931348623157e308 || value < -1.7976931348623157e308) return 0;
-    const remainder: number = Math.trunc(value) % 4294967296;
-    return remainder < 0 ? remainder + 4294967296 : remainder;
-  }`);
-  const tokens = new Map([["xor", "^"], ["and", "&"], ["or", "|"], ["shl", "<<"], ["shr", ">>"], ["ushr", ">>>"]]);
-  for (const [key, name] of names) {
-    const width = key === "ushr" ? unsigned : signed;
-    const setup = `const x: ${width} = (${toUnsigned}(a) as ${unsigned}) as ${width};
-    const y: ${width} = (${toUnsigned}(b) as ${unsigned}) as ${width};`;
-    const token = tokens.get(key) ?? null;
-    const expression = token === null
-      ? `return ((mulU32(x as ${unsigned}, y as ${unsigned}) as ${signed}) | 0) as number;`
-      : `return (x ${token} y) as number;`;
-    body.push(`function ${name}(a: number, b: number): number { ${setup}\n${expression} }`);
-  }
-  return body.join("\n");
-}
-
-type Visit = ts.Visitor<ts.Node, ts.Node>;
-type Allocate = (stem: string) => string;
-
-function indexedLoop(node: ts.ForOfStatement, name: string, factory: ts.NodeFactory, allocate: Allocate, visit: Visit): ts.ForStatement {
-  const initializer = node.initializer;
-  if (!ts.isVariableDeclarationList(initializer) || initializer.declarations.length !== 1) throw new Error("Leek WASM: typed-array iteration requires one declared binding");
-  const binding = initializer.declarations[0] ?? null;
-  if (!binding || !ts.isIdentifier(binding.name)) throw new Error("Leek WASM: typed-array iteration requires an identifier");
-  const array = factory.createIdentifier(allocate("__leek_array"));
-  const index = factory.createIdentifier(allocate("__leek_index"));
-  const number = factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword);
-  const body = ts.visitNode(node.statement, visit, ts.isStatement) ?? node.statement;
-  const expression = ts.visitNode(node.expression, visit, ts.isExpression) ?? node.expression;
-  const item = factory.createVariableStatement([], factory.createVariableDeclarationList([
-    nativeVariable(binding.name, number, factory.createAsExpression(factory.createElementAccessExpression(array, index), number))
-  ], initializer.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)));
-  return factory.createForStatement(
-    factory.createVariableDeclarationList([
-      nativeVariable(array, factory.createTypeReferenceNode(name), expression),
-      nativeVariable(index, factory.createTypeReferenceNode(signed), factory.createNumericLiteral(0))
-    ], ts.NodeFlags.Let),
-    factory.createBinaryExpression(index, ts.SyntaxKind.LessThanToken, factory.createPropertyAccessExpression(array, "length")),
-    factory.createPostfixUnaryExpression(index, ts.SyntaxKind.PlusPlusToken),
-    factory.createBlock([item, body], true)
-  );
-}
-
-/** Lower operations whose JavaScript numeric or iteration semantics differ from AssemblyScript. */
 export interface WasmLowering {
   text: string;
   usesMultiply: boolean;
   usesPredicates: boolean;
+  usesCoercion: boolean;
 }
 
+function labelledLoop(node: ts.Node): { loop: ts.ForOfStatement; labels: ts.Identifier[] } | null {
+  const labels: ts.Identifier[] = [];
+  while (ts.isLabeledStatement(node)) { labels.push(node.label); node = node.statement; }
+  return ts.isForOfStatement(node) && !(node.awaitModifier ?? null) ? { loop: node, labels } : null;
+}
+
+/** Bind native operations and add only the integer facts missing from the inherited compiler. */
 export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrinsicSpecifier = "./__leek_wasm_intrinsics.js"): WasmLowering {
-  const identifiers = new Set<string>();
-  const collect = (node: ts.Node): void => {
-    if (ts.isIdentifier(node)) identifiers.add(node.text);
-    ts.forEachChild(node, collect);
+  const storage = integerStorage(source, checker);
+  const used = { widths: false, multiply: false, predicates: false, coercion: false, changed: false };
+  const stored = (node: ts.Node): boolean => {
+    const symbol = ts.isIdentifier(node) ? checker.getSymbolAtLocation(node) ?? null : null;
+    return symbol !== null && storage.has(symbol);
   };
-  collect(source);
-  const allocate: Allocate = stem => {
-    let name = stem;
-    while (identifiers.has(name)) name += "_";
-    identifiers.add(name);
-    return name;
-  };
-  const toUnsigned = allocate("__leek_uint32");
-  const names = new Map<string, string>();
-  const helper = (key: string): string => {
-    const existing = names.get(key) ?? null;
-    if (existing) return existing;
-    const name = allocate("__leek_" + key);
-    names.set(key, name);
-    return name;
-  };
-  let changed = false;
-  let widths = false;
-  let usesPredicates = false;
   const result = ts.transform(source, [context => root => {
     const factory = context.factory;
-    const visit: Visit = node => {
+    const cast = (node: ts.Expression, type: string): ts.Expression => factory.createParenthesizedExpression(factory.createAsExpression(
+      factory.createParenthesizedExpression(node), type === "number" ? factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword) : factory.createTypeReferenceNode(type)));
+    const number = (node: ts.Expression): ts.Expression => cast(ts.visitNode(node, visit, ts.isExpression) ?? node, "number");
+    const native = (expression: ts.Expression, width: string): ts.Expression => {
+      used.widths = true;
+      const node = unwrap(expression);
+      if (integerOperation(node, checker)) return cast(operation(node), width);
+      if (stored(node)) return cast(node, width);
+      if (integerValue(node, checker, storage)) {
+        const type = checker.getTypeAtLocation(node);
+        const representation = type.isNumberLiteral() && type.value < 0 ? signed : unsigned;
+        return cast(cast(ts.visitNode(node, visit, ts.isExpression) ?? node, representation), width);
+      }
+      // Math.imul(value, 1) is the inherited, non-trapping ToInt32 operation.
+      used.coercion = true;
+      return cast(cast(factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier("NativeMath"), "imul"), [],
+        [number(node), factory.createNumericLiteral(1)]), signed), width);
+    };
+    const operation = (node: ts.Node): ts.Expression => {
+      if (ts.isBinaryExpression(node)) {
+        const width = node.operatorToken.kind === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken ? unsigned : signed;
+        return factory.createBinaryExpression(native(node.left, width), node.operatorToken, native(node.right, width));
+      }
+      if (!ts.isCallExpression(node)) throw new Error("Leek WASM: invalid integer expression");
+      if (!node.arguments.every(argument => integerValue(argument, checker, storage))) {
+        return cast(factory.updateCallExpression(node, node.expression, node.typeArguments ?? [], node.arguments.map(number)), signed);
+      }
+      used.multiply = true;
+      const product = cast(factory.createCallExpression(factory.createIdentifier("mulU32"), [], node.arguments.map(argument => native(argument, unsigned))), signed);
+      return factory.createBinaryExpression(product, ts.SyntaxKind.BarToken, factory.createNumericLiteral(0));
+    };
+    const visit: ts.Visitor<ts.Node, ts.Node> = node => {
       const predicate = numericCall(node, checker);
       if (predicate && ts.isCallExpression(node)) {
-        changed = usesPredicates = true;
-        return factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier("F64"), predicate), [],
-          node.arguments.map(arg => ts.visitNode(arg, visit, ts.isExpression) ?? arg));
-      }
-      const key = operation(node, checker);
-      if (key && (ts.isBinaryExpression(node) || ts.isCallExpression(node))) {
-        const args = ts.isBinaryExpression(node) ? [node.left, node.right] : node.arguments;
-        changed = widths = true;
-        return factory.createCallExpression(factory.createIdentifier(helper(key)), [], args.map(arg => ts.visitNode(arg, visit, ts.isExpression) ?? arg));
-      }
-      const array = ts.isForOfStatement(node) && !Boolean(node.awaitModifier ?? null) ? arrayName(node.expression, checker) : null;
-      if (array && ts.isForOfStatement(node)) {
-        changed = widths = true;
-        return indexedLoop(node, array, factory, allocate, visit);
+        used.changed = used.predicates = true;
+        return factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier("F64"), predicate), [], node.arguments.map(number));
       }
       const initializer = ts.isVariableDeclaration(node) ? node.initializer ?? null : null;
-      const concrete = initializer && ts.isNewExpression(initializer) ? arrayName(initializer, checker) : null;
-      if (concrete && ts.isVariableDeclaration(node) && !Boolean(node.type ?? null)) {
-        changed = true;
-        return nativeVariable(node.name, factory.createTypeReferenceNode(concrete), initializer, Boolean(node.exclamationToken ?? null));
+      if (ts.isVariableDeclaration(node) && stored(node.name) && initializer) {
+        used.changed = used.widths = true;
+        return nativeVariable(node.name, factory.createTypeReferenceNode(unsigned), native(initializer, unsigned));
+      }
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && stored(unwrap(node.left))) {
+        used.changed = true;
+        return factory.updateBinaryExpression(node, node.left, node.operatorToken, native(node.right, unsigned));
+      }
+      if (integerOperation(node, checker) && (ts.isBinaryExpression(node) ||
+          ts.isCallExpression(node) && node.arguments.every(argument => integerValue(argument, checker, storage)))) {
+        used.changed = used.widths = true;
+        return cast(operation(node), "number");
+      }
+      const iteration = labelledLoop(node);
+      const array = iteration ? arrayType(checker.getTypeAtLocation(iteration.loop.expression)) : null;
+      if (iteration && array) {
+        used.changed = used.widths = true;
+        const initializer = iteration.loop.initializer;
+        const binding = ts.isVariableDeclarationList(initializer) ? initializer.declarations[0] ?? null : null;
+        return lowerArrayLoop({ source, loop: iteration.loop, name: array, checker, visit,
+          nativeItem: binding !== null && stored(binding.name), labels: iteration.labels });
+      }
+      const concrete = initializer && ts.isNewExpression(initializer) ? arrayType(checker.getTypeAtLocation(initializer)) : null;
+      if (concrete && ts.isVariableDeclaration(node) && !(node.type ?? null) && initializer) {
+        used.changed = true;
+        return nativeVariable(node.name, factory.createTypeReferenceNode(concrete), ts.visitNode(initializer, visit, ts.isExpression) ?? initializer, Boolean(node.exclamationToken ?? null));
       }
       return ts.visitEachChild(node, visit, context);
     };
     return ts.visitNode(root, visit, ts.isSourceFile) ?? root;
   }]);
   try {
-    if (!changed) return { text: source.text, usesMultiply: false, usesPredicates: false };
-    if (widths && (identifiers.has(signed) || identifiers.has(unsigned))) throw new Error("Leek WASM: reserved native width alias in " + source.fileName);
-    const aliases = widths ? `type ${signed} = number;\ntype ${unsigned} = number;\n` : "";
-    const body = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed }).printFile(result.transformed[0] ?? source);
-    const usesMultiply = names.has("imul");
-    if (usesMultiply && identifiers.has("mulU32")) throw new Error("Leek WASM: reserved intrinsic mulU32 in " + source.fileName);
-    if (usesPredicates && identifiers.has("F64")) throw new Error("Leek WASM: reserved intrinsic F64 in " + source.fileName);
-    const bindings = [...(usesMultiply ? ["mulU32"] : []), ...(usesPredicates ? ["F64"] : [])];
+    const flags = { usesMultiply: used.multiply, usesPredicates: used.predicates, usesCoercion: used.coercion };
+    if (!used.changed) return { text: source.text, ...flags };
+    const bindings = [...(used.multiply ? ["mulU32"] : []), ...(used.predicates ? ["F64"] : []), ...(used.coercion ? ["NativeMath"] : [])];
+    const reserved = new Set([...bindings, ...(used.widths ? Object.keys(nativeWidths) : [])]);
+    const check = (node: ts.Node): void => {
+      if (ts.isIdentifier(node) && reserved.has(node.text)) throw new Error("Leek WASM: reserved native binding " + node.text + " in " + source.fileName);
+      ts.forEachChild(node, check);
+    };
+    check(source);
+    const aliases = used.widths ? Object.keys(nativeWidths).map(name => "type " + name + " = number;\n").join("") : "";
     const imports = bindings.length ? "import { " + bindings.join(", ") + " } from " + JSON.stringify(intrinsicSpecifier) + ";\n" : "";
-    return { text: imports + aliases + body + "\n" + integerHelpers(names, toUnsigned) + "\n", usesMultiply, usesPredicates };
+    const body = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed }).printFile(result.transformed[0] ?? source);
+    return { text: imports + aliases + body, ...flags };
   } finally { result.dispose(); }
 }
 
-/** Apply the WASM extension to the staged module graph before invoking Bake. */
+/** Apply the WASM extension to the staged graph before Baguette's mandatory Bake stage. */
 export function prepareWasmSource(input: LoweredProject): string[] {
   const config = ts.readJsonConfigFile(input.project, ts.sys.readFile);
   const parsed = ts.parseJsonSourceFileConfigFileContent(config, ts.sys, dirname(input.project), {}, input.project);
@@ -195,20 +142,19 @@ export function prepareWasmSource(input: LoweredProject): string[] {
   const checker = program.getTypeChecker();
   const root = resolve(dirname(input.project), "source");
   const intrinsic = resolve(root, intrinsicFile);
-  let usesMultiply = false;
-  let usesPredicates = false;
+  const references = new Set<string>();
   for (const file of program.getSourceFiles()) {
     if (file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) continue;
     const path = relative(root, file.fileName);
     if (isAbsolute(path) || path === ".." || path.startsWith(".." + sep)) throw new Error("WASM source outside staging tree: " + file.fileName);
     const modulePath = relative(dirname(file.fileName), intrinsic).split(sep).join("/").replace(/\.ts$/, ".js");
-    const specifier = modulePath.startsWith(".") ? modulePath : "./" + modulePath;
-    const output = lowerWasm(file, checker, specifier);
-    usesMultiply = usesMultiply || output.usesMultiply;
-    usesPredicates = usesPredicates || output.usesPredicates;
+    const output = lowerWasm(file, checker, modulePath.startsWith(".") ? modulePath : "./" + modulePath);
+    if (output.usesMultiply) references.add(multiplyReference);
+    if (output.usesPredicates) references.add(floatReference);
+    if (output.usesCoercion) references.add(integerReference);
     if (output.text !== file.text) writeFileSync(file.fileName, output.text);
   }
-  if (!usesMultiply && !usesPredicates) return [];
-  writeFileSync(intrinsic, (usesMultiply ? multiplyReference : "") + (usesPredicates ? floatReference : ""), { flag: "wx" });
+  if (!references.size) return [];
+  writeFileSync(intrinsic, [...references].join(""), { flag: "wx" });
   return [intrinsic];
 }

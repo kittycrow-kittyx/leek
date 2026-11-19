@@ -26,3 +26,18 @@ The combined project is an analysis view, not a compiler build. Review
 similarity findings against the original contracts; matching syntax or types
 alone does not establish equivalent behaviour. Short functions and anonymous
 test callbacks can escape detection.
+
+CG205 also skips nested implementations inside recognised function bodies and
+does not parse generated code strings. AssemblyScript's standard library under
+node_modules is outside this scan. A clean report is a heuristic result, not a
+proof that all available upstream capabilities are reused.
+
+## Compiled WASM correctness
+
+`bun run test` includes an end-to-end fixture compiled through Leek, Bake,
+Baguette, AssemblyScript and Binaryen. It instantiates the final optimised WASM,
+compares numeric edge cases with original TypeScript, verifies managed byte
+buffer lifetimes and checks native checksum loop instructions. The checksum
+loop requires byte loads, integer XOR and integer multiplication without
+floating-point operations. This checks architecture and correctness without
+measuring execution speed. Baguette's deterministic rebuild check remains enabled.

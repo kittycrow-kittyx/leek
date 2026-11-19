@@ -12,25 +12,22 @@ interface WasmAbi {
 // The references returned by this bridge are managed objects, not data addresses.
 const byteBridge = `type LeekByteIndex = number;
 type LeekByteValue = number;
-const roots: Uint8Array[] = [];
+const roots: Set<Uint8Array> = new Set<Uint8Array>();
 
 export function leekBytesNew(length: LeekByteIndex): Uint8Array {
   const bytes: Uint8Array = new Uint8Array(length);
-  roots.push(bytes);
+  roots.add(bytes);
   return bytes;
 }
 
 export function leekBytesSet(bytes: Uint8Array, index: LeekByteIndex, value: LeekByteIndex): boolean {
-  if (roots.indexOf(bytes) < 0 || index < 0 || index >= bytes.length || value < 0 || value > 255) return false;
+  if (!roots.has(bytes) || index < 0 || index >= bytes.length || value < 0 || value > 255) return false;
   bytes[index] = value as LeekByteValue;
   return true;
 }
 
 export function leekBytesRelease(bytes: Uint8Array): boolean {
-  const slot: LeekByteIndex = roots.indexOf(bytes);
-  if (slot < 0) return false;
-  roots.splice(slot, 1);
-  return true;
+  return roots.delete(bytes);
 }
 `;
 
