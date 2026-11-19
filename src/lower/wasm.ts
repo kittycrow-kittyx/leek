@@ -19,7 +19,8 @@ const operators = new Map<ts.SyntaxKind, string>([
 function librarySymbol(symbol: ts.Symbol | null): boolean {
   if (symbol === null) return false;
   const declarations = symbol.declarations ?? [];
-  return declarations.length > 0 && declarations.every(decl => /(?:^|[\\/])lib\.[^\\/]+\.d\.ts$/.test(decl.getSourceFile().fileName));
+  // Ambient library augmentations add declarations to the same built-in symbol.
+  return declarations.some(decl => /(?:^|[\\/])lib\.[^\\/]+\.d\.ts$/.test(decl.getSourceFile().fileName));
 }
 
 function arrayName(node: ts.Expression, checker: ts.TypeChecker): string | null {

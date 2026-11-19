@@ -7,12 +7,18 @@ import { join } from "node:path";
 import ts from "typescript";
 import { lowerWasm } from "../src/lower/wasm.ts";
 
-function lowered(text: string): string {
+function lowered(text: string, ambient = ""): string {
   const root = mkdtempSync(join(tmpdir(), "leek-wasm-"));
   try {
     const file = join(root, "source.ts");
     writeFileSync(file, text);
-    const program = ts.createProgram([file], { target: ts.ScriptTarget.ES2022, strict: true, types: [] });
+    const declarations = join(root, "ambient.d.ts");
+    writeFileSync(declarations, ambient);
+    const program = ts.createProgram([file, declarations], {
+      target: ts.ScriptTarget.ES2022, strict: true, types: [],
+      lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
+      noUncheckedIndexedAccess: true, exactOptionalPropertyTypes: true
+    });
     const source = program.getSourceFile(file) ?? null;
     assert.ok(source);
     return lowerWasm(source, program.getTypeChecker());
@@ -39,4 +45,19 @@ test("typed-array loops preserve checksum and evaluate the iterable once", () =>
   assert.ok(!output.includes(" of bytes()"));
   assert.match(output, /for \(let /);
   assert.equal(execute(output, "[checksum(), calls]"), execute(input, "[checksum(), calls]"));
+});
+
+test("typed-array parameters retain their built-in identity after ambient augmentation", () => {
+  const input = "function checksum(bytes: Uint8Array): number { let value = 0x811c9dc5; for (const byte of bytes) value = Math.imul(value ^ byte, 0x01000193); return value >>> 0; }";
+  const ambient = "interface Uint8Array<TArrayBuffer extends ArrayBufferLike = ArrayBufferLike> { readonly leekFixture: number; }";
+  const output = lowered(input, ambient);
+  assert.ok(!output.includes(" of bytes"));
+  assert.match(output, /for \(let /);
+  const expression = "[[],[0],[255],[0,1,255,42]].map(bytes => checksum(new Uint8Array(bytes)))";
+  assert.equal(execute(output, expression), execute(input, expression));
+});
+
+test("a locally declared typed-array lookalike is not a library array", () => {
+  const input = "export {}; class Uint8Array { *[Symbol.iterator](): IterableIterator<number> { yield 1; } } function run(bytes: Uint8Array): void { for (const byte of bytes) { console.log(byte); } }";
+  assert.equal(lowered(input), input);
 });
