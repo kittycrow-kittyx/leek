@@ -17,20 +17,18 @@ Crust and Bake sources in one temporary TypeScript project. The source list
 includes tracked implementation files, tooling and tests. Bake is included
 once. Dependency integrity is checked before scanning.
 
-Code Guards reports cross-repository type overlap (CG101–CG103), repeated
-functions (CG205) and duplicate configuration (CG304). The report excludes
-pairs entirely within Leek or entirely within its dependencies. Findings
-fail this separate command and are saved to `logs/code-guards-reuse.json`.
+`logs/code-guards-reuse.json` records type overlap (CG101–CG103), repeated
+functions (CG205) and duplicate configuration (CG304). Each comparison pairs
+a Leek file with a pinned dependency file. Warnings produce a non-zero exit code.
 
 The combined project is an analysis view, not a compiler build. Review
 similarity findings against the original contracts; matching syntax or types
 alone does not establish equivalent behaviour. Short functions and anonymous
 test callbacks can escape detection.
 
-CG205 also skips nested implementations inside recognised function bodies and
-does not parse generated code strings. AssemblyScript's standard library under
-node_modules is outside this scan. A clean report is a heuristic result, not a
-proof that all available upstream capabilities are reused.
+CG205 compares named function bodies. Nested functions, anonymous callbacks,
+generated helper strings and AssemblyScript's standard library require a
+separate review. Check generated instructions alongside the heuristic report.
 
 ## Compiled WASM correctness
 

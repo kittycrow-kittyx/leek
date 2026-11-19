@@ -47,7 +47,7 @@ function checkNumbers(exports: WebAssembly.Exports): void {
   for (const [name, expected] of [["signedRead", -1], ["widerWrite", 1], ["assignmentResult", 0]] as const) assert.equal(call(exports, name), expected);
 }
 
-function checkBytes(exports: WebAssembly.Exports): void {
+function checkBytes(exports: WebAssembly.Exports, memory: WebAssembly.Memory): void {
   const inputs = [[], [0], [255], [0, 1, 255, 42], Array.from(new Uint8Array(256), (value, index) => index)];
   const handles = inputs.map(bytes => call(exports, "leekBytesNew", bytes.length));
   for (const [index, bytes] of inputs.entries()) {
@@ -58,11 +58,20 @@ function checkBytes(exports: WebAssembly.Exports): void {
     assert.equal(call(exports, "leekBytesSet", handle, bytes.length, 0), 0);
     assert.equal(call(exports, "leekBytesSet", handle, 0, 256), 0);
     assert.equal(call(exports, "checksum", handle), reference.checksum(new Uint8Array(bytes)));
+    const pointer = call(exports, "leekBytesData", handle);
+    assert.ok(pointer > 0);
+    assert.notEqual(pointer, handle, "managed references and buffer addresses are distinct");
+    assert.equal(call(exports, "leekBytesLength", handle), bytes.length);
+    const bulk = Uint8Array.from(bytes, value => 255 - value);
+    new Uint8Array(memory.buffer, pointer, bulk.length).set(bulk);
+    assert.equal(call(exports, "checksum", handle), reference.checksum(bulk));
   }
   for (const handle of handles.reverse()) {
     assert.equal(call(exports, "leekBytesRelease", handle), 1);
     assert.equal(call(exports, "leekBytesRelease", handle), 0);
     assert.equal(call(exports, "leekBytesSet", handle, 0, 1), 0);
+    assert.equal(call(exports, "leekBytesData", handle), 0);
+    assert.equal(call(exports, "leekBytesLength", handle), -1);
   }
 }
 
@@ -108,7 +117,7 @@ test("compiled WASM preserves numeric semantics, rooted buffers and native check
     assert.deepEqual(WebAssembly.Module.imports(module).map(item => item.module + "." + item.name).sort(), ["env.abort", "env.memory"]);
     const instance = new WebAssembly.Instance(module, { env: { memory, abort: () => { throw new Error("Native abort"); } } });
     checkNumbers(instance.exports);
-    checkBytes(instance.exports);
+    checkBytes(instance.exports, memory);
     checkInstructions(bytes);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

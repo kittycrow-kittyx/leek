@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 import ts from "typescript";
 import type { LoweredProject } from "./lower/index.ts";
 
@@ -12,6 +12,7 @@ interface WasmAbi {
 // The references returned by this bridge are managed objects, not data addresses.
 const byteBridge = `type LeekByteIndex = number;
 type LeekByteValue = number;
+type LeekBytePointer = number;
 const roots: Set<Uint8Array> = new Set<Uint8Array>();
 
 export function leekBytesNew(length: LeekByteIndex): Uint8Array {
@@ -29,7 +30,20 @@ export function leekBytesSet(bytes: Uint8Array, index: LeekByteIndex, value: Lee
 export function leekBytesRelease(bytes: Uint8Array): boolean {
   return roots.delete(bytes);
 }
+
+export function leekBytesData(bytes: Uint8Array): LeekBytePointer {
+  if (!roots.has(bytes)) return 0;
+  return bytes.dataStart as LeekBytePointer;
+}
+
+export function leekBytesLength(bytes: Uint8Array): LeekByteIndex {
+  if (!roots.has(bytes)) return -1;
+  return bytes.length;
+}
 `;
+
+// Checking-only augmentation for the existing AssemblyScript ArrayBufferView property.
+const byteDeclaration = "interface Uint8Array<TArrayBuffer extends ArrayBufferLike = ArrayBufferLike> { readonly dataStart: number; }\n";
 
 function byteParameter(node: ts.ParameterDeclaration): boolean {
   const type = node.type ?? null;
@@ -47,10 +61,15 @@ function needsByteBridge(entry: string): boolean {
 export function prepareWasmAbi(input: LoweredProject): WasmAbi {
   if (!needsByteBridge(input.entry)) return { entries: [input.entry], typeAliases: {}, abiTypes: {} };
   const bridge = resolve(dirname(input.project), "source", "__leek_byte_abi.ts");
-  writeFileSync(bridge, byteBridge, { flag: "wx" });
+  const declaration = resolve(dirname(bridge), "__leek_byte_abi.d.ts");
+  writeFileSync(declaration, byteDeclaration, { flag: "wx" });
+  // Bake copies implementation modules; an absolute reference retains the
+  // checking-only declaration through that staging step without emitting it.
+  const header = "/// <reference path=" + JSON.stringify(declaration.split(sep).join("/")) + " />\n";
+  writeFileSync(bridge, header + byteBridge, { flag: "wx" });
   return {
     entries: [input.entry, bridge],
-    typeAliases: { LeekByteIndex: "i32", LeekByteValue: "u8" },
-    abiTypes: { Uint8Array: "number", LeekByteIndex: "number", LeekByteValue: "number" }
+    typeAliases: { LeekByteIndex: "i32", LeekByteValue: "u8", LeekBytePointer: "u32" },
+    abiTypes: { Uint8Array: "number", LeekByteIndex: "number", LeekByteValue: "number", LeekBytePointer: "number" }
   };
 }
