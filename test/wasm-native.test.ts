@@ -47,6 +47,9 @@ function checkNumbers(exports: WebAssembly.Exports): void {
   for (const [name, expected] of [["signedRead", -1], ["widerWrite", 1], ["assignmentResult", 0]] as const) assert.equal(call(exports, name), expected);
 }
 
+/** Byte setters and bulk views must address the same rooted array. Releasing
+ * one handle must invalidate its bridge access while the other handles remain live.
+ */
 function checkBytes(exports: WebAssembly.Exports, memory: WebAssembly.Memory): void {
   const inputs = [[], [0], [255], [0, 1, 255, 42], Array.from(new Uint8Array(256), (value, index) => index)];
   const handles = inputs.map(bytes => call(exports, "leekBytesNew", bytes.length));
