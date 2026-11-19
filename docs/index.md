@@ -7,4 +7,5 @@ Install the pinned dependencies and run `bun run build` before changing the lowe
 - [Numeric lowering](modules/lower/numeric.md)
 - [Source staging](modules/lower/index.md)
 - [Backend selection](modules/backend.md)
+- [WebAssembly emission](modules/wasm.md)
 - [CLI entry](modules/cli.md)
