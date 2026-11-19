@@ -48,8 +48,8 @@ export async function build(req: Request): Promise<void> {
 
 function compilerBake(selected: Target) {
   switch (selected) {
-    case "wasm": return import("../baguette/vendor/bake/src/index.ts");
-    case "clang": return import("../croissant/vendor/bake/src/index.ts");
-    case "rust": return import("../crust/vendor/bake/src/index.ts");
+    case "wasm": return import("../baguette/bake/src/index.ts");
+    case "clang": return import("../croissant/bake/src/index.ts");
+    case "rust": return import("../crust/bake/src/index.ts");
   }
 }

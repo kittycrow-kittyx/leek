@@ -5,7 +5,7 @@
       "name": "Baguette",
       "repository": "kittycrow-kittyx/baguette",
       "path": "baguette",
-      "commit": "bea3c8ad872d52aad285c08d079945cf8c594edb",
+      "commit": "6358889e2f63cbfc29b161b23454ce6e6301da9a",
       "relationship": "build",
       "direct": true,
       "updatePolicy": "pull-request"
@@ -14,7 +14,7 @@
       "name": "Croissant",
       "repository": "kittycrow-kittyx/croissant",
       "path": "croissant",
-      "commit": "806eae95e48fe0c7637eb202ad578bc4614f40c8",
+      "commit": "7625aeb83dddfb9ce3a0afeb7be67378c48ed66e",
       "relationship": "build",
       "direct": true,
       "updatePolicy": "pull-request"
@@ -23,7 +23,7 @@
       "name": "Crust",
       "repository": "kittycrow-kittyx/crust",
       "path": "crust",
-      "commit": "ee89397fa8e2a6b6b2bf1a817a9c870e50b458ef",
+      "commit": "02b88890398adf47bce3e012bf1d9755acbb7770",
       "relationship": "build",
       "direct": true,
       "updatePolicy": "pull-request"

@@ -61,9 +61,9 @@ function checkPin(checkout: string, commit: string): string {
 }
 
 export function requireBake(compiler: string): string {
-  const entry = execFileSync("git", ["-C", compiler, "ls-tree", "HEAD", "--", "vendor/bake"], { encoding: "utf8" }).trim();
-  if (!/^160000 commit [a-f0-9]{40}\tvendor\/bake$/.test(entry)) throw new Error("Compiler does not pin Bake");
-  return checkPin(resolve(compiler, "vendor", "bake"), entry.slice(14, 54));
+  const entry = execFileSync("git", ["-C", compiler, "ls-tree", "HEAD", "--", "bake"], { encoding: "utf8" }).trim();
+  if (!/^160000 commit [a-f0-9]{40}\tbake$/.test(entry)) throw new Error("Compiler does not pin Bake");
+  return checkPin(resolve(compiler, "bake"), entry.slice(14, 54));
 }
 
 export function createProject(source: string, entries: readonly string[], project: string, rootDir = resolve(source, "src")): void {
