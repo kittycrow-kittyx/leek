@@ -13,8 +13,8 @@ test("explicit byte-array arguments activate the managed byte ABI", () => {
     writeFileSync(entry, "export function check(bytes: Uint8Array): number { return bytes.length; }");
     const result = prepareWasmAbi({ project: join(root, "tsconfig.json"), entry, files: 1 });
     assert.equal(result.entries.length, 2);
-    assert.equal(result.abiTypes.Uint8Array, "number");
-    assert.equal(result.typeAliases.LeekByteIndex, "i32");
+    assert.deepEqual(result.abiTypes, { Uint8Array: "number", LeekByteIndex: "number", LeekByteValue: "number" });
+    assert.deepEqual(result.typeAliases, { LeekByteIndex: "i32", LeekByteValue: "u8" });
     const bridge = readFileSync(join(root, "source", "__leek_byte_abi.ts"), "utf8");
     assert.match(bridge, /roots.push\(bytes\)/);
     assert.match(bridge, /roots.splice\(slot, 1\)/);

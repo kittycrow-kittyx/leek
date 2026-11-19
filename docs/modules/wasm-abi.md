@@ -1,7 +1,13 @@
 # WebAssembly ABI extensions
 
-`prepareWasmAbi(input)` inspects the staged entry module and returns Baguette input entries, native type aliases and host ABI mappings. An exported function with an explicit Uint8Array parameter activates Leek's managed byte-array bridge. The generated TypeScript module is written only into the disposable staged source tree. No original mikuOS or compiler source is modified.
+`prepareWasmAbi(input)` reads the staged entry module and returns Baguette entry paths, native type aliases and host ABI mappings. An explicit Uint8Array parameter on an exported function declaration activates the bridge. The generated module resides in the staged source tree.
 
-The emitted host interface exposes `leekBytesNew(length)`, `leekBytesSet(reference, index, value)` and `leekBytesRelease(reference)`. Allocation creates a real Uint8Array, retained by a module-owned array until release. Set validates ownership, the index and byte range. Release removes the retained reference. A caller passes the live reference returned by allocation to the original exported function. The numeric reference is an opaque AssemblyScript managed object reference, not a raw linear-memory data pointer. Callers must not forge or reuse released references; direct source exports assume valid live objects. This is a trusted-host ABI, not a memory-safe handle table.
+| Export | Behaviour |
+| --- | --- |
+| leekBytesNew(length) | Allocates and roots a Uint8Array. |
+| leekBytesSet(reference, index, value) | Checks ownership, bounds and byte range before writing. |
+| leekBytesRelease(reference) | Removes the root. |
 
-This first extension covers explicit Uint8Array parameters on exported function declarations in the selected entry. It does not yet implement arbitrary reference types, returned reference ownership, function expressions, bulk transfer or general userspace ABI lowering. These remain explicit limitations. Numeric-only entries do not receive the bridge.
+The ABI reference is an AssemblyScript object address, not a byte buffer address. Exported functions require live references from the same instance. References expire on release. The host is trusted.
+
+Supported boundary types: scalar values and explicit Uint8Array parameters. Unsupported: other reference types, returned reference ownership, function expressions and bulk transfers.
