@@ -25,8 +25,8 @@ export function emitWasm(compiler: string, input: LoweredProject, outputDir: str
     materialiseInferredTypes: true,
     asyncLowering: "state-machine"
   });
-  // Baguette performs its own Bake stage on the Leek-transformed source.
+  // Baguette performs its own Bake stage; select the hosted engine explicitly.
   execFileSync(process.execPath, [
     resolve(compiler, "src/compiler.ts"), "--config", config, "--emit-modular-wat"
-  ], { cwd: compiler, stdio: "inherit" });
+  ], { cwd: compiler, stdio: "inherit", env: { ...process.env, BAKE_ENGINE: "host" } });
 }
