@@ -1,8 +1,8 @@
 # Strict code checks
 
-`npm run guards` checks Leek's own TypeScript, tests, documentation
+`bun run guards` checks Leek's own TypeScript, tests, documentation
 and repository configuration using all Code Guards rules. Every warning
-fails the command. `npm run build` requires this check before type validation.
+fails the command. `bun run build` requires this check before type validation.
 
 The scan uses a temporary view of the working tree. Git submodules
 remain available for type resolution. The guards inspect only Leek's files.

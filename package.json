@@ -10,10 +10,11 @@
   },
   "scripts": {
     "leek": "bun src/cli.ts",
-    "check": "tsc --noEmit -p tsconfig.json",
+    "check": "bun --bun tsc --noEmit -p tsconfig.json",
     "test": "bun test ./test",
     "guards": "bun scripts/guards.ts",
-    "build": "npm run guards && npm run check"
+    "build": "bun run guards && bun run check",
+    "setup": "bash scripts/setup.sh"
   },
   "dependencies": {
     "typescript": "5.9.3",
@@ -25,6 +26,6 @@
     "@kitty-crow/code-guards": "git+https://github.com/kitty-crow/code-guards.git#d1ce06c6b4a71e5f94ca97ba4b0f6780408aa3f6"
   },
   "engines": {
-    "bun": ">=1.1.0"
+    "bun": ">=1.4.5"
   }
 }

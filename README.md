@@ -20,17 +20,18 @@ complete userspace. C and Rust backend integration is pending.
 
 ## Requirements
 
-- Bun 1.1 or later and Node.js 22 or later;
+- Bun 1.4.5 or later;
 - the pinned compiler dependencies and a mikuOS source checkout.
 
 ## Build and test
 
 ```sh
-git submodule update --init --recursive
-npm install
-npm run build
-npm test
+bun run setup
+bun run build
+bun run test
 ```
+
+The setup command installs Leek's dependencies and the pinned compiler and Bake dependencies. Run it after cloning or changing dependency revisions.
 
 ## Use
 

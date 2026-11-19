@@ -1,12 +1,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadProject } from "@kitty-crow/code-guards/dist/src/project.js";
-import { renderFindings } from "@kitty-crow/code-guards/dist/src/diagnostics.js";
+import { loadProject } from "@kitty-crow/code-guards/src/project.ts";
+import { renderFindings } from "@kitty-crow/code-guards/src/diagnostics.ts";
 import {
   noNestedIf, typeReuse, functionQuality, moduleCohesion, codeHealth, crossModule,
   documentation, repoHygiene, enterpriseLookingNaming, reviewPractices
-} from "@kitty-crow/code-guards/dist/src/guards/index.js";
-import { failed, resolveExpectations, type Finding } from "@kitty-crow/code-guards/dist/src/model.js";
+} from "@kitty-crow/code-guards/src/guards/index.ts";
+import { failed, resolveExpectations, type Finding } from "@kitty-crow/code-guards/src/model.ts";
 import { owned, scoped } from "./scope.ts";
 
 async function check(view: string): Promise<number> {
