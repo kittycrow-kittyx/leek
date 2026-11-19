@@ -1,0 +1,32 @@
+import { execFileSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { json } from "./project.ts";
+import type { LoweredProject } from "./lower/index.ts";
+
+/** Use the released Baguette entry point until its emitter is available as a reusable API. */
+export function emitWasm(compiler: string, input: LoweredProject, outputDir: string): void {
+  const config = resolve(dirname(input.project), "baguette.config.json");
+  json(config, {
+    schema: 1,
+    name: "Leek",
+    project: input.project,
+    entries: [input.entry],
+    generatedDir: resolve(outputDir, "wat"),
+    outDir: outputDir,
+    moduleBaseName: "leek",
+    abi: { exports: "all-exported-functions" },
+    memory: { initialPages: 1024, maximumPages: 32768, import: true, export: false },
+    runtime: "incremental",
+    variants: [{ name: "leek", threaded: false }],
+    allowedHostImports: [
+      { module: "env", name: "memory", kind: "memory" }
+    ],
+    completeKernel: false,
+    materialiseInferredTypes: true,
+    asyncLowering: "state-machine"
+  });
+  // Baguette performs its own Bake stage on the Leek-transformed source.
+  execFileSync(process.execPath, [
+    resolve(compiler, "src/compiler.ts"), "--config", config, "--emit-modular-wat"
+  ], { cwd: compiler, stdio: "inherit" });
+}

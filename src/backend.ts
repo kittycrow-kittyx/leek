@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { requireBake, requirePin, type Target } from "./project.ts";
 import type { LoweredProject } from "./lower/index.ts";
+import { emitWasm } from "./wasm.ts";
 
 const compilers = { wasm: "baguette", clang: "croissant", rust: "crust" } as const;
 
@@ -18,6 +19,10 @@ export async function build(req: Request): Promise<void> {
   const { root, work, selected, input, validateOnly, emit } = req;
   const compiler = requirePin(root, compilers[selected]);
   requireBake(compiler);
+  if (selected === "wasm" && emit && !validateOnly) {
+    emitWasm(compiler, input, resolve(root, "dist", selected));
+    return;
+  }
   const { bake, printBakeResult } = await compilerBake(selected);
   const lowered = resolve(work, "lowered");
   const result = bake({
@@ -27,7 +32,7 @@ export async function build(req: Request): Promise<void> {
   });
   printBakeResult(result);
   if (!result.success) throw new Error("Lowering failed");
-  if (!emit || validateOnly) return;
+  if (!emit || validateOnly || selected === "wasm") return;
   const manifestPath = resolve(lowered, "bake-manifest.json");
   const outputDir = resolve(root, "dist", selected);
   switch (selected) {
@@ -41,8 +46,6 @@ export async function build(req: Request): Promise<void> {
       compile({ manifestPath, outputDir });
       break;
     }
-    case "wasm":
-      throw new Error("WASM emission requires Baguette's importable emitter API");
   }
 }
 

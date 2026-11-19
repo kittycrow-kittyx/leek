@@ -15,8 +15,9 @@ of the Thistle kernel.
 | `rust` | Crust | Rust |
 
 Source analysis and lowering are available for all three targets. The
-WebAssembly backend is integrated but not yet validated against the
-complete userspace. C and Rust backend integration is pending.
+WebAssembly compilation path uses the released Baguette compiler process
+until its emitter can be extended through an importable API. Userspace ABI
+and language coverage are not yet complete. Native backend validation is pending.
 
 ## Requirements
 
@@ -43,7 +44,7 @@ bun src/cli.ts wasm --source ../mikuOS --entry src/sh/lex.ts --validate-only
 
 The entry path is relative to the supplied mikuOS source directory. Diagnostics and
 lowered source are written to `build/`. WebAssembly output is written
-to `dist/wasm/` when compilation succeeds.
+to `dist/wasm/` when compilation succeeds, with WAT under `dist/wasm/wat/`.
 
 ## Documentation
 

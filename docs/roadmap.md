@@ -6,5 +6,5 @@ the resolved programme. Numeric predicates are lowered before the inherited
 Bake passes. Each target uses the Bake revision pinned by its compiler.
 
 C and Rust emission use the inherited compiler functions. WAT emission
-requires an importable Baguette emitter. Collections, strings, exceptions,
+uses Baguette's released command-line entry point until a reusable emitter API is available. Collections, strings, exceptions,
 closures, asynchronous operations and kernel bindings require further lowering.
