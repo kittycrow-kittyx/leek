@@ -23,7 +23,7 @@ export async function build(req: Request): Promise<void> {
   const result = bake({
     project: input.project, outDir: lowered,
     reportFile: resolve(work, "bake-report.json"),
-    target: selected, engine: "host", validateOnly, failOnWarnings: true
+    target: selected, engine: "host", wasmFile: null, validateOnly, failOnWarnings: true
   });
   printBakeResult(result);
   if (!result.success) throw new Error("Lowering failed");
