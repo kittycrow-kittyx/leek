@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import ts from "typescript";
+import { nativeVariable } from "../../baguette/src/ast.ts";
 import type { LoweredProject } from "./index.ts";
 
 const signed = "LeekNativeI32";
@@ -65,7 +66,7 @@ function integerHelpers(names: Map<string, string>, toUnsigned: string): string 
   return body.join("\n");
 }
 
-type Visit = (node: ts.Node) => ts.VisitResult<ts.Node>;
+type Visit = ts.Visitor<ts.Node, ts.Node>;
 type Allocate = (stem: string) => string;
 
 function indexedLoop(node: ts.ForOfStatement, name: string, factory: ts.NodeFactory, allocate: Allocate, visit: Visit): ts.ForStatement {
@@ -79,12 +80,12 @@ function indexedLoop(node: ts.ForOfStatement, name: string, factory: ts.NodeFact
   const body = ts.visitNode(node.statement, visit, ts.isStatement) ?? node.statement;
   const expression = ts.visitNode(node.expression, visit, ts.isExpression) ?? node.expression;
   const item = factory.createVariableStatement([], factory.createVariableDeclarationList([
-    factory.createVariableDeclaration(binding.name, [], number, factory.createAsExpression(factory.createElementAccessExpression(array, index), number))
+    nativeVariable(binding.name, number, factory.createAsExpression(factory.createElementAccessExpression(array, index), number))
   ], initializer.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)));
   return factory.createForStatement(
     factory.createVariableDeclarationList([
-      factory.createVariableDeclaration(array, [], factory.createTypeReferenceNode(name), expression),
-      factory.createVariableDeclaration(index, [], factory.createTypeReferenceNode(signed), factory.createNumericLiteral(0))
+      nativeVariable(array, factory.createTypeReferenceNode(name), expression),
+      nativeVariable(index, factory.createTypeReferenceNode(signed), factory.createNumericLiteral(0))
     ], ts.NodeFlags.Let),
     factory.createBinaryExpression(index, ts.SyntaxKind.LessThanToken, factory.createPropertyAccessExpression(array, "length")),
     factory.createPostfixUnaryExpression(index, ts.SyntaxKind.PlusPlusToken),
@@ -126,16 +127,16 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker): strin
         changed = widths = true;
         return factory.createCallExpression(factory.createIdentifier(helper(key)), [], args.map(arg => ts.visitNode(arg, visit, ts.isExpression) ?? arg));
       }
-      const array = ts.isForOfStatement(node) && !node.awaitModifier ? arrayName(node.expression, checker) : null;
+      const array = ts.isForOfStatement(node) && !Boolean(node.awaitModifier ?? null) ? arrayName(node.expression, checker) : null;
       if (array && ts.isForOfStatement(node)) {
         changed = widths = true;
         return indexedLoop(node, array, factory, allocate, visit);
       }
       const initializer = ts.isVariableDeclaration(node) ? node.initializer ?? null : null;
       const concrete = initializer && ts.isNewExpression(initializer) ? arrayName(initializer, checker) : null;
-      if (concrete && ts.isVariableDeclaration(node) && !node.type) {
+      if (concrete && ts.isVariableDeclaration(node) && !Boolean(node.type ?? null)) {
         changed = true;
-        return factory.updateVariableDeclaration(node, node.name, node.exclamationToken, factory.createTypeReferenceNode(concrete), initializer ?? null);
+        return nativeVariable(node.name, factory.createTypeReferenceNode(concrete), initializer, Boolean(node.exclamationToken ?? null));
       }
       return ts.visitEachChild(node, visit, context);
     };
@@ -154,10 +155,14 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker): strin
 export function prepareWasmSource(input: LoweredProject): void {
   const config = ts.readJsonConfigFile(input.project, ts.sys.readFile);
   const parsed = ts.parseJsonSourceFileConfigFileContent(config, ts.sys, dirname(input.project), {}, input.project);
+  if (parsed.errors.length) throw new Error(parsed.errors.map(error => ts.flattenDiagnosticMessageText(error.messageText, "\n")).join("\n"));
   const program = ts.createProgram(parsed.fileNames, parsed.options);
   const checker = program.getTypeChecker();
+  const root = resolve(dirname(input.project), "source");
   for (const file of program.getSourceFiles()) {
     if (file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) continue;
+    const path = relative(root, file.fileName);
+    if (isAbsolute(path) || path === ".." || path.startsWith(".." + sep)) throw new Error("WASM source outside staging tree: " + file.fileName);
     const output = lowerWasm(file, checker);
     if (output !== file.text) writeFileSync(file.fileName, output);
   }
