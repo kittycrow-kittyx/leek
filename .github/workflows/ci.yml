@@ -1,4 +1,4 @@
-name: Compiler validation
+name: Transpiler validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   validate:
-    name: Validate compiler
+    name: Validate transpiler
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -26,7 +26,7 @@ jobs:
         run: bun run setup
       - name: Strict Code Guards
         run: bun run guards
-      - name: Type-check compiler
+      - name: Type-check transpiler
         run: bun run check
       - name: Validate cross-repository reuse
         run: bun run guards:reuse
@@ -37,5 +37,5 @@ jobs:
           name: leek-code-guards
           path: logs/code-guards*.json
           if-no-files-found: ignore
-      - name: Test compiler
+      - name: Test transpiler
         run: bun run test
