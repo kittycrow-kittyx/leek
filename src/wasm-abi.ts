@@ -15,7 +15,7 @@ type LeekByteValue = number;
 const roots: Uint8Array[] = [];
 
 export function leekBytesNew(length: LeekByteIndex): Uint8Array {
-  const bytes = new Uint8Array(length);
+  const bytes: Uint8Array = new Uint8Array(length);
   roots.push(bytes);
   return bytes;
 }
