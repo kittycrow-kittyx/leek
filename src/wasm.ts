@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { json } from "./project.ts";
 import type { LoweredProject } from "./lower/index.ts";
+import { prepareWasmAbi } from "./wasm-abi.ts";
 
 /** Use the released Baguette entry point until its emitter is available as a reusable API. */
 export function emitWasm(compiler: string, input: LoweredProject, outputDir: string): void {
@@ -10,7 +11,7 @@ export function emitWasm(compiler: string, input: LoweredProject, outputDir: str
     schema: 1,
     name: "Leek",
     project: input.project,
-    entries: [input.entry],
+    ...prepareWasmAbi(input),
     generatedDir: resolve(outputDir, "wat"),
     outDir: outputDir,
     moduleBaseName: "leek",

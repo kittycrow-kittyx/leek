@@ -1,0 +1,7 @@
+# WebAssembly ABI extensions
+
+`prepareWasmAbi(input)` inspects the staged entry module and returns Baguette input entries, native type aliases and host ABI mappings. An exported function with an explicit Uint8Array parameter activates Leek's managed byte-array bridge. The generated TypeScript module is written only into the disposable staged source tree. No original mikuOS or compiler source is modified.
+
+The emitted host interface exposes `leekBytesNew(length)`, `leekBytesSet(reference, index, value)` and `leekBytesRelease(reference)`. Allocation creates a real Uint8Array, retained by a module-owned array until release. Set validates ownership, the index and byte range. Release removes the retained reference. A caller passes the live reference returned by allocation to the original exported function. The numeric reference is an opaque AssemblyScript managed object reference, not a raw linear-memory data pointer. Callers must not forge or reuse released references; direct source exports assume valid live objects. This is a trusted-host ABI, not a memory-safe handle table.
+
+This first extension covers explicit Uint8Array parameters on exported function declarations in the selected entry. It does not yet implement arbitrary reference types, returned reference ownership, function expressions, bulk transfer or general userspace ABI lowering. These remain explicit limitations. Numeric-only entries do not receive the bridge.
