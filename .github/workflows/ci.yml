@@ -1,4 +1,4 @@
-name: CI
+name: Compiler validation
 
 on:
   push:
@@ -26,9 +26,9 @@ jobs:
         run: bun run setup
       - name: Strict Code Guards
         run: bun run guards
-      - name: Type-check source
+      - name: Type-check compiler
         run: bun run check
-      - name: Cross-repository reuse
+      - name: Validate cross-repository reuse
         run: bun run guards:reuse
       - name: Upload Code Guards report
         if: always()
@@ -37,5 +37,5 @@ jobs:
           name: leek-code-guards
           path: logs/code-guards*.json
           if-no-files-found: ignore
-      - name: Unit tests
+      - name: Test compiler
         run: bun run test
