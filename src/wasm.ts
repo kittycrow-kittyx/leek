@@ -8,13 +8,15 @@ import { prepareWasmSource } from "./lower/wasm.ts";
 /** Use the released Baguette entry point until its emitter is available as a reusable API. */
 export function emitWasm(compiler: string, input: LoweredProject, outputDir: string): void {
   const config = resolve(dirname(input.project), "baguette.config.json");
-  prepareWasmSource(input);
+  const intrinsicModules = prepareWasmSource(input);
   const abi = prepareWasmAbi(input);
   json(config, {
     schema: 1,
     name: "Leek",
     project: input.project,
     ...abi,
+    intrinsicModules,
+    ...(intrinsicModules.length ? { preludeFile: resolve(compiler, "prelude/teto-baseline.ts") } : {}),
     typeAliases: { ...abi.typeAliases, LeekNativeI32: "i32", LeekNativeU32: "u32" },
     generatedDir: resolve(outputDir, "wat"),
     outDir: outputDir,

@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
-import { lowerWasm } from "../src/lower/wasm.ts";
+import { lowerWasm, multiplyReference } from "../src/lower/wasm.ts";
 
 function lowered(text: string, ambient = ""): string {
   const root = mkdtempSync(join(tmpdir(), "leek-wasm-"));
@@ -21,19 +21,26 @@ function lowered(text: string, ambient = ""): string {
     });
     const source = program.getSourceFile(file) ?? null;
     assert.ok(source);
-    return lowerWasm(source, program.getTypeChecker());
+    return lowerWasm(source, program.getTypeChecker()).text;
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
 function execute(text: string, expression: string): string {
-  const code = ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  return execFileSync(process.execPath, ["-e", code + "\nconsole.log(JSON.stringify(" + expression + "));"], { encoding: "utf8" }).trim();
+  const root = mkdtempSync(join(tmpdir(), "leek-wasm-reference-"));
+  try {
+    const file = join(root, "source.ts");
+    writeFileSync(join(root, "__leek_wasm_intrinsics.ts"), multiplyReference);
+    writeFileSync(file, text + "\nconsole.log(JSON.stringify(" + expression + "));");
+    return execFileSync(process.execPath, [file], { encoding: "utf8" }).trim();
+  } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
 test("WASM integer helpers preserve Number coercion and wraparound", () => {
   const input = "function calculate(a: number, b: number): number[] { return [a ^ b, a & b, a | b, a << b, a >> b, a >>> b, Math.imul(a, b)]; }";
   const output = lowered(input);
   assert.ok(!output.includes("Math.imul"));
+  assert.match(output, /import \{ mulU32 \}/);
+  assert.ok(!output.includes("65535"));
   const values = "[NaN,Infinity,-Infinity,-4294967297,-2147483648,-1.9,-0,0,1.9,2147483647,4294967295,4294967296,9007199254740991]";
   const expression = values + ".flatMap(a => " + values + ".map(b => calculate(a,b)))";
   assert.equal(execute(output, expression), execute(input, expression));
