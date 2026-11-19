@@ -11,7 +11,7 @@ export interface LoweredProject {
 }
 
 /** Check the original graph first so lowering never copies invalid or out-of-tree source into the compiler workspace. */
-export function stageSource(source: string, entry: string, work: string): LoweredProject {
+export function stageSource(source: string, entry: string, work: string, lowerPredicates = true): LoweredProject {
   const original = resolve(work, "original.json");
   createProject(source, [entry], original);
   const config = ts.readJsonConfigFile(original, ts.sys.readFile);
@@ -32,7 +32,7 @@ export function stageSource(source: string, entry: string, work: string): Lowere
     }
     const path = resolve(staged, rel);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, file.isDeclarationFile ? file.text : lowerNumeric(file, checker));
+    writeFileSync(path, file.isDeclarationFile || !lowerPredicates ? file.text : lowerNumeric(file, checker));
     files++;
   }
   const stagedEntry = resolve(staged, relative(root, entry));

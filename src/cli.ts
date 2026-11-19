@@ -25,7 +25,7 @@ async function main(): Promise<void> {
     throw new Error("Source must be outside the build working directory");
   }
   rmSync(work, { recursive: true, force: true });
-  const staged = stageSource(source, original, work);
+  const staged = stageSource(source, original, work, selected !== "wasm");
   await build({
     root, work, selected, input: staged,
     validateOnly: validateOnly || command === "analyse", emit: command === "compile"

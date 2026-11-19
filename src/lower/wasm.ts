@@ -3,6 +3,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 import { nativeVariable } from "../../baguette/src/ast.ts";
 import type { LoweredProject } from "./index.ts";
+import { numericCall } from "./numeric.ts";
 
 const signed = "LeekNativeI32";
 const unsigned = "LeekNativeU32";
@@ -11,6 +12,16 @@ const intrinsicFile = "__leek_wasm_intrinsics.ts";
 // TypeScript reference for Baguette’s native mulU32 intrinsic. Bake checks this
 // module; Baguette omits its body and resolves the call to its pinned prelude.
 export const multiplyReference = "export function mulU32(left: number, right: number): number { return Math.imul(left, right) >>> 0; }\n";
+
+// F64 is supplied by AssemblyScript. This reference exists only for TypeScript
+// checking and source-level tests; no class or predicate body is emitted.
+export const floatReference = `export class F64 {
+  static isNaN(value: number): boolean { return Number.isNaN(value); }
+  static isFinite(value: number): boolean { return Number.isFinite(value); }
+  static isInteger(value: number): boolean { return Number.isInteger(value); }
+  static isSafeInteger(value: number): boolean { return Number.isSafeInteger(value); }
+}
+`;
 const typedArrays = new Set(["Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array", "Int32Array", "Uint32Array", "Float32Array", "Float64Array"]);
 const operators = new Map<ts.SyntaxKind, string>([
   [ts.SyntaxKind.CaretToken, "xor"],
@@ -103,6 +114,7 @@ function indexedLoop(node: ts.ForOfStatement, name: string, factory: ts.NodeFact
 export interface WasmLowering {
   text: string;
   usesMultiply: boolean;
+  usesPredicates: boolean;
 }
 
 export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrinsicSpecifier = "./__leek_wasm_intrinsics.js"): WasmLowering {
@@ -129,9 +141,16 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
   };
   let changed = false;
   let widths = false;
+  let usesPredicates = false;
   const result = ts.transform(source, [context => root => {
     const factory = context.factory;
     const visit: Visit = node => {
+      const predicate = numericCall(node, checker);
+      if (predicate && ts.isCallExpression(node)) {
+        changed = usesPredicates = true;
+        return factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier("F64"), predicate), [],
+          node.arguments.map(arg => ts.visitNode(arg, visit, ts.isExpression) ?? arg));
+      }
       const key = operation(node, checker);
       if (key && (ts.isBinaryExpression(node) || ts.isCallExpression(node))) {
         const args = ts.isBinaryExpression(node) ? [node.left, node.right] : node.arguments;
@@ -154,14 +173,16 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
     return ts.visitNode(root, visit, ts.isSourceFile) ?? root;
   }]);
   try {
-    if (!changed) return { text: source.text, usesMultiply: false };
+    if (!changed) return { text: source.text, usesMultiply: false, usesPredicates: false };
     if (widths && (identifiers.has(signed) || identifiers.has(unsigned))) throw new Error("Leek WASM: reserved native width alias in " + source.fileName);
     const aliases = widths ? `type ${signed} = number;\ntype ${unsigned} = number;\n` : "";
     const body = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed }).printFile(result.transformed[0] ?? source);
     const usesMultiply = names.has("imul");
     if (usesMultiply && identifiers.has("mulU32")) throw new Error("Leek WASM: reserved intrinsic mulU32 in " + source.fileName);
-    const imports = usesMultiply ? "import { mulU32 } from " + JSON.stringify(intrinsicSpecifier) + ";\n" : "";
-    return { text: imports + aliases + body + "\n" + integerHelpers(names, toUnsigned) + "\n", usesMultiply };
+    if (usesPredicates && identifiers.has("F64")) throw new Error("Leek WASM: reserved intrinsic F64 in " + source.fileName);
+    const bindings = [...(usesMultiply ? ["mulU32"] : []), ...(usesPredicates ? ["F64"] : [])];
+    const imports = bindings.length ? "import { " + bindings.join(", ") + " } from " + JSON.stringify(intrinsicSpecifier) + ";\n" : "";
+    return { text: imports + aliases + body + "\n" + integerHelpers(names, toUnsigned) + "\n", usesMultiply, usesPredicates };
   } finally { result.dispose(); }
 }
 
@@ -175,6 +196,7 @@ export function prepareWasmSource(input: LoweredProject): string[] {
   const root = resolve(dirname(input.project), "source");
   const intrinsic = resolve(root, intrinsicFile);
   let usesMultiply = false;
+  let usesPredicates = false;
   for (const file of program.getSourceFiles()) {
     if (file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) continue;
     const path = relative(root, file.fileName);
@@ -183,9 +205,10 @@ export function prepareWasmSource(input: LoweredProject): string[] {
     const specifier = modulePath.startsWith(".") ? modulePath : "./" + modulePath;
     const output = lowerWasm(file, checker, specifier);
     usesMultiply = usesMultiply || output.usesMultiply;
+    usesPredicates = usesPredicates || output.usesPredicates;
     if (output.text !== file.text) writeFileSync(file.fileName, output.text);
   }
-  if (!usesMultiply) return [];
-  writeFileSync(intrinsic, multiplyReference, { flag: "wx" });
+  if (!usesMultiply && !usesPredicates) return [];
+  writeFileSync(intrinsic, (usesMultiply ? multiplyReference : "") + (usesPredicates ? floatReference : ""), { flag: "wx" });
   return [intrinsic];
 }

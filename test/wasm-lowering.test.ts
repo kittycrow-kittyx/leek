@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
-import { lowerWasm, multiplyReference } from "../src/lower/wasm.ts";
+import { floatReference, lowerWasm, multiplyReference } from "../src/lower/wasm.ts";
 
 function lowered(text: string, ambient = ""): string {
   const root = mkdtempSync(join(tmpdir(), "leek-wasm-"));
@@ -29,7 +29,7 @@ function execute(text: string, expression: string): string {
   const root = mkdtempSync(join(tmpdir(), "leek-wasm-reference-"));
   try {
     const file = join(root, "source.ts");
-    writeFileSync(join(root, "__leek_wasm_intrinsics.ts"), multiplyReference);
+    writeFileSync(join(root, "__leek_wasm_intrinsics.ts"), multiplyReference + floatReference);
     writeFileSync(file, text + "\nconsole.log(JSON.stringify(" + expression + "));");
     return execFileSync(process.execPath, [file], { encoding: "utf8" }).trim();
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -66,5 +66,20 @@ test("typed-array parameters retain their built-in identity after ambient augmen
 
 test("a locally declared typed-array lookalike is not a library array", () => {
   const input = "export {}; class Uint8Array { *[Symbol.iterator](): IterableIterator<number> { yield 1; } } function run(bytes: Uint8Array): void { for (const byte of bytes) { console.log(byte); } }";
+  assert.equal(lowered(input), input);
+});
+
+test("WASM Number predicates bind the existing AssemblyScript F64 methods", () => {
+  const input = "function check(n: number): boolean[] { return [Number.isNaN(n), Number.isFinite(n), Number.isInteger(n), Number.isSafeInteger(n)]; }";
+  const output = lowered(input);
+  assert.match(output, /import \{ F64 \}/);
+  for (const method of ["isNaN", "isFinite", "isInteger", "isSafeInteger"]) assert.ok(output.includes("F64." + method + "(n)"));
+  assert.ok(!output.includes("__leek_is"));
+  const expression = "[NaN,Infinity,-Infinity,-0,0,0.5,-0.5,42,-42,Number.MAX_VALUE,Number.MIN_VALUE,Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER+1].map(check)";
+  assert.equal(execute(output, expression), execute(input, expression));
+});
+
+test("WASM predicate binding respects local shadows", () => {
+  const input = "function check(Number: { isFinite(n: number): boolean }): boolean { return Number.isFinite(3); }";
   assert.equal(lowered(input), input);
 });

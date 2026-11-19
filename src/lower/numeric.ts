@@ -18,7 +18,8 @@ function standardNumber(node: ts.Identifier, checker: ts.TypeChecker): boolean {
   );
 }
 
-function numericCall(node: ts.Node, checker: ts.TypeChecker): string | null {
+/** Identify a standard Number predicate on an already typed numeric operand. */
+export function numericCall(node: ts.Node, checker: ts.TypeChecker): string | null {
   if (!ts.isCallExpression(node) || node.arguments.length !== 1 || Boolean(node.questionDotToken ?? null) ||
       !ts.isPropertyAccessExpression(node.expression) || Boolean(node.expression.questionDotToken ?? null) ||
       !ts.isIdentifier(node.expression.expression) ||

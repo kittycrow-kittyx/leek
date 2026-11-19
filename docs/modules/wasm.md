@@ -7,3 +7,5 @@ The function applies [WASM source lowering](lower/wasm.md), writes a userspace-s
 The process uses imported linear memory, the incremental AssemblyScript runtime and an optional host abort function. Its single baseline variant uses [Leek's ABI extensions](wasm-abi.md) to marshal supported userspace references through Baguette's numeric ABI. Additional reference ownership and language extensions remain Leek's responsibility. The upstream checkout is not modified. A compiler failure propagates to the caller and may leave intermediate diagnostic files.
 
 The WASM extension selects Baguette’s pinned baseline prelude when `mulU32` is required. Leek supplies the TypeScript reference contract through `intrinsicModules`; it does not emit its own native multiplication routine.
+
+The same intrinsic module mechanism binds the AssemblyScript F64 methods. No WASM predicate implementation is supplied by Leek.
