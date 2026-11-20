@@ -10,6 +10,10 @@ interface Cell {
   name: string;
 }
 
+/** Share one cell per mutable binding across lifted functions in the invocation.
+ * closureUnits proves local declarations do not escape before they are removed;
+ * Promise handlers retain their forwarding call sites.
+ */
 function closureBindings(source: ts.SourceFile, units: ClosureUnit[]) {
   const prefix = "__leek_" + createHash("sha256").update(source.text).digest("hex").slice(0, 12);
   const names = identifiers(source);
