@@ -37,9 +37,10 @@ function appliesPresent(helper: ts.FunctionDeclaration, checker: ts.TypeChecker)
 function truthContext(node: ts.Expression): boolean {
   while (ts.isParenthesizedExpression(node.parent)) node = node.parent;
   const parent = node.parent;
-  return ts.isPrefixUnaryExpression(parent) && parent.operator === ts.SyntaxKind.ExclamationToken ||
+  if (ts.isBinaryExpression(parent) && [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken].includes(parent.operatorToken.kind)) return truthContext(parent);
+  return ts.isExpressionStatement(parent) || ts.isPrefixUnaryExpression(parent) && parent.operator === ts.SyntaxKind.ExclamationToken ||
     (ts.isIfStatement(parent) || ts.isWhileStatement(parent) || ts.isDoStatement(parent)) && parent.expression === node ||
-    ts.isConditionalExpression(parent) && parent.condition === node;
+    ts.isConditionalExpression(parent) && parent.condition === node || ts.isForStatement(parent) && (parent.condition ?? null) === node;
 }
 
 /** Inline only expression callbacks with no nested environment, writes to their parameter or shadowed type scope. */

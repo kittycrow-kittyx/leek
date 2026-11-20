@@ -222,7 +222,8 @@ function apply<T,R>(value: T | null, use: (value:T)=>R): R | null { if (value ==
 function input(value: string | null): string | null { events.push("input"); return value; }
 function predicate(value: string): boolean { events.push("predicate:" + value); return value.startsWith("-"); }
 function run(value: string | null): number {
-  if (apply(input(value), item => predicate(item)) ?? null) return 1;
+  (apply(input(value), item => predicate(item)) ?? null) && events.push("selected");
+  if (false || (true && (apply(input(value), item => predicate(item)) ?? null))) return 1;
   return !!(apply(input(value), item => predicate(item)) ?? null) ? 2 : 3;
 }
 console.log(JSON.stringify([[null,"", "-S", "plain"].map(run), events]));`;
@@ -234,6 +235,7 @@ test("nullable applications retain value contexts, effectful helpers and generat
   const helper = 'function apply<T,R>(value:T|null,use:(value:T)=>R):R|null { if(value===null)return null; return use(value); }';
   const sources = [
     helper + ' function run(value:{flag:boolean}|null):boolean|null { return apply(value,item=>item.flag) ?? null; }',
+    helper + ' function run(value:{flag:boolean}|null):boolean|null { return (apply(value,item=>item.flag) ?? null) && true; }',
     helper + ' function run(value:{flag:boolean}|null):boolean { if(apply(value,item=>item.flag) ?? true)return true; return false; }',
     'function apply<T,R>(value:T|null,use:(value:T)=>R):R|null { console.log("helper"); if(value===null)return null; return use(value); } function run(value:{flag:boolean}|null):boolean { return !!(apply(value,item=>item.flag) ?? null); }',
     'function* apply<T,R>(value:T|null,use:(value:T)=>R):Generator<never,R|null,unknown> { if(value===null)return null; return use(value); } function run(value:{flag:boolean}|null):boolean { return !!(apply(value,item=>item.flag) ?? null); }',
