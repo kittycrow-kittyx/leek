@@ -21,9 +21,17 @@ Leek stages that graph without maintaining another kernel or userspace source tr
 
 Source analysis and lowering are available for all three targets. The
 WebAssembly path uses the released Baguette compiler process, including its
-mandatory Bake stage. The boot entry currently fails on exception values,
-undefined-sensitive data and host globals. Promise continuations and the
-Host argument and Os result still need native representations.
+mandatory Bake stage.
+
+Whole-OS emission has these unresolved requirements:
+
+| Canonical construct | Leek requirement |
+| --- | --- |
+| Catch bindings | Native exception values; Bake reports BK1002 |
+| `process`, `navigator`, `fetch` | Host capability bindings; Bake reports BK1102 |
+| Numeric array holes and indexed records | Missing-value storage; Bake reports BK3001 |
+| Promise callbacks | Native settlement and continuation support |
+| `boot(Host): Os` | Numeric host ABI and reference ownership |
 
 ## Requirements
 

@@ -8,6 +8,11 @@ Literals, construction and standard Number or Math calls can omit unreachable fa
 
 Indexed defaults on strings and typed arrays capture the receiver and numeric index, check bounds and integrality, then select the native element or fallback. String access uses UTF-16 code units. Reference arrays use `referenceRead` as their checking contract and the existing AssemblyScript `unchecked` operation after the bounds check. Native reference holes become null at this coalescing boundary. Numeric arrays with holes retain their source expression because zero cannot represent an absent Number element.
 
-`nullableAliases` maps the checked `LeekArrayIndex` cast to native i32 after the bounds and integrality checks. Typed-array captures omit TypeScript's ArrayBuffer type argument when naming the native storage class. Generated indexed bindings reject collisions with existing source identifiers.
+`nullableAliases` maps the checked `LeekArrayIndex` cast to native i32 after the bounds and integrality checks. Generated indexed bindings reject collisions with existing source identifiers.
+
+| Checking type | Native type |
+| --- | --- |
+| `LeekArrayIndex = number` | `i32` |
+| `Uint8Array<ArrayBufferLike>` | `Uint8Array` |
 
 Bake handles selection for nullable identifiers. Other undefined-sensitive values, unresolved generics, primitive nullable representations and expressions containing suspension await further Leek transformations. Tests compare observable evaluation order with original TypeScript and execute the compiled nullable path in WebAssembly.
