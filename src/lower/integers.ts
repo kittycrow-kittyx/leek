@@ -4,7 +4,8 @@ import { functionOwner } from "./function-body.ts";
 export const nativeWidths = { LeekNativeI32: "i32", LeekNativeU32: "u32" } as const;
 export const signed = "LeekNativeI32";
 export const unsigned = "LeekNativeU32";
-const arrays = new Set(["Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array", "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array"]);
+export const typedArrays = ["Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array", "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array"] as const;
+const arrays = new Set<string>(typedArrays);
 const bitwise = new Set([
   ts.SyntaxKind.CaretToken, ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken,
   ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.GreaterThanGreaterThanToken,

@@ -1,6 +1,6 @@
 # WASM source lowering
 
-`lowerWasm(source, checker)` binds numeric bitwise expressions, shifts, standard Math.imul calls and typed-array iteration to the pinned compiler infrastructure. The returned `WasmLowering` contains staged text and flags for native multiplication, numeric predicates and coercion contracts.
+`lowerWasm(source, checker)` binds numeric bitwise expressions, shifts, standard Math.imul calls and typed-array iteration to the pinned compiler infrastructure. The returned `WasmLowering` contains staged text and flags for native multiplication, numeric predicates, coercion contracts and a list of buffer-view contracts.
 
 General Math.imul calls use AssemblyScript's existing implementation. Bitwise operands with arbitrary Number values use its `NativeMath.imul(value, 1)` coercion, then an i32 cast before unsigned reinterpretation. This preserves negative values without relying on a saturating float-to-u32 conversion. Proven integer operands use native casts and Baguette's `mulU32` primitive. Only locals whose complete set of reads and writes permits modulo-32 storage receive a native annotation. Number results are restored at expression boundaries.
 
@@ -14,6 +14,8 @@ Numeric predicates on typed Number operands use the existing `F64.isNaN`, `F64.i
 
 `wasmPrelude(compiler, work)` stages the pinned baseline prelude and aliases AssemblyScript's existing F64, NativeMath, Int64Array and Uint64Array exports. Its inline LeekMulU32 adapter calls Baguette's mulU32 without supplying another multiplication implementation. Instruction tests require the hot loop to retain native integer loads, XOR and multiplication.
 
-The native profile binds JavaScript BigInt64Array and BigUint64Array names to AssemblyScript’s existing Int64Array and Uint64Array storage. Native tests cover length allocation, signed and unsigned boundary values, indexed defaults and iteration. Buffer-view constructors and other overloads still require explicit compatibility lowering before whole-OS emission can succeed.
+The native profile binds JavaScript BigInt64Array and BigUint64Array names to AssemblyScript’s existing Int64Array and Uint64Array storage. Native tests cover length allocation, signed and unsigned boundary values, indexed defaults and iteration. Concrete ArrayBuffer constructors use the [native view adapter](views.md). Shared buffers and other constructor overloads still require compatibility lowering before whole-OS emission can succeed.
 
 The staged profile also applies [local exception control flow](exceptions.md) before capture analysis. Only closed synchronous Error throws qualify; general exceptions and coroutine propagation remain unsupported.
+
+`WasmLowering.views` records the typed-array class names whose checking contracts must be staged. The prelude delegates these constructors to the inherited native wrap implementation.

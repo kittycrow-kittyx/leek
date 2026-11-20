@@ -5,6 +5,7 @@ import { nativeVariable } from "../../baguette/src/ast.ts";
 import { numericCall } from "./numeric.ts";
 import { arrayType, integerOperation, integerStorage, integerValue, nativeWidths, signed, unsigned, unwrap } from "./integers.ts";
 import { lowerArrayLoop } from "./loops.ts";
+import { bufferView, viewName, viewPrelude } from "./views.ts";
 
 
 // Bake checks these reference contracts; Baguette omits their bodies and uses
@@ -29,6 +30,7 @@ export interface WasmLowering {
   usesPredicates: boolean;
   usesCoercion: boolean;
   usesUnchecked: boolean;
+  views: string[];
 }
 
 function labelledLoop(node: ts.Node): { loop: ts.ForOfStatement; labels: ts.Identifier[] } | null {
@@ -40,6 +42,7 @@ function labelledLoop(node: ts.Node): { loop: ts.ForOfStatement; labels: ts.Iden
 /** Bind native operations and add only the integer facts missing from the inherited compiler. */
 export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrinsicSpecifier = "./__leek_wasm_intrinsics.js"): WasmLowering {
   const storage = integerStorage(source, checker);
+  const views = new Set<string>();
   const used = { widths: false, multiply: false, predicates: false, coercion: false, unchecked: false, changed: false };
   const stored = (node: ts.Node): boolean => {
     const symbol = ts.isIdentifier(node) ? checker.getSymbolAtLocation(node) ?? null : null;
@@ -79,6 +82,19 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
       return factory.createBinaryExpression(product, ts.SyntaxKind.BarToken, factory.createNumericLiteral(0));
     };
     const visit: ts.Visitor<ts.Node, ts.Node> = node => {
+      const view = bufferView(node, checker);
+      if (view && view.empty && ts.isNewExpression(node)) {
+        used.changed = true;
+        return factory.updateNewExpression(node, node.expression, node.typeArguments ?? [], [factory.createNumericLiteral(0)]);
+      }
+      if (view && ts.isNewExpression(node)) {
+        used.changed = true;
+        views.add(view.name);
+        const args = (node.arguments ?? []).map(argument => ts.visitNode(argument, visit, ts.isExpression) ?? argument);
+        return factory.createCallExpression(factory.createIdentifier(viewName(view.name)), [], [
+          ...args, ...Array.from({ length: 3 - args.length }, () => factory.createNumericLiteral(0)), args.length === 3 ? factory.createTrue() : factory.createFalse()
+        ]);
+      }
       const predicate = numericCall(node, checker);
       if (predicate && ts.isCallExpression(node)) {
         used.changed = used.predicates = true;
@@ -117,9 +133,9 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
     return ts.visitNode(root, visit, ts.isSourceFile) ?? root;
   }]);
   try {
-    const flags = { usesMultiply: used.multiply, usesPredicates: used.predicates, usesCoercion: used.coercion, usesUnchecked: used.unchecked };
+    const flags = { usesMultiply: used.multiply, usesPredicates: used.predicates, usesCoercion: used.coercion, usesUnchecked: used.unchecked, views: [...views] };
     if (!used.changed) return { text: source.text, ...flags };
-    const bindings = [...(used.multiply ? ["LeekMulU32"] : []), ...(used.predicates ? ["LeekF64"] : []), ...(used.coercion ? ["LeekNativeMath"] : []), ...(used.unchecked ? ["unchecked"] : [])];
+    const bindings = [...(used.multiply ? ["LeekMulU32"] : []), ...(used.predicates ? ["LeekF64"] : []), ...(used.coercion ? ["LeekNativeMath"] : []), ...(used.unchecked ? ["unchecked"] : []), ...[...views].map(viewName)];
     const reserved = new Set([...bindings, ...(used.widths ? Object.keys(nativeWidths) : [])]);
     const check = (node: ts.Node): void => {
       if (ts.isIdentifier(node) && reserved.has(node.text)) throw new Error("Leek WASM: reserved native binding " + node.text + " in " + source.fileName);
@@ -141,6 +157,6 @@ export function wasmPrelude(compiler: string, work: string): string {
     'import { F64 as LeekF64 } from "~lib/number";\n' +
     'import { NativeMath as LeekNativeMath } from "~lib/math";\n' +
     '@inline function LeekReferenceAt<T>(values: Array<T>, index: i32): T | null { return unchecked(values[index]); }\n' +
-    '@inline function LeekMulU32(left: u32, right: u32): u32 { return mulU32(left, right); }\n');
+    '@inline function LeekMulU32(left: u32, right: u32): u32 { return mulU32(left, right); }\n' + viewPrelude());
   return path;
 }

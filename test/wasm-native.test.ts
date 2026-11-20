@@ -43,6 +43,8 @@ function checkNumbers(exports: WebAssembly.Exports): void {
   assert.equal(call(exports, "nativeEnvironment"), 1, "native WASM uses the source fallback for absent browser capabilities");
   for (const value of [-7, 0, 1, 4, 12]) assert.equal(call(exports, "synchronousCapture", value), reference.synchronousCapture(value));
   assert.equal(call(exports, "bigintLoop"), reference.bigintLoop());
+  assert.equal(call(exports, "mixedBufferViews"), reference.mixedBufferViews());
+  for (const offset of [0, -0.5, 0.5, 8, 8.5, 16, NaN]) for (const length of [0, 1, -0.5, 1.9, NaN]) assert.equal(call(exports, "bufferViewAlias", offset, length), reference.bufferViewAlias(offset, length));
   for (const index of [-1, -0.5, -0, 0, 0.5, 1, 1.9, 2, 3, 4, 5, NaN, Infinity, -Infinity, 4294967296]) {
     assert.equal(call(exports, "indexedCodePoint", index), reference.indexedCodePoint(index));
     assert.equal(call(exports, "requiredCodePoint", index), reference.requiredCodePoint(index));
@@ -170,5 +172,9 @@ test("compiled WASM preserves numeric semantics, native closures, rooted buffers
     await checkClosures(instance.exports);
     checkBytes(instance.exports, memory);
     checkInstructions(bytes);
+    for (const [offset, length] of [[1, 1], [-1, 1], [0, -1], [8, 4], [Infinity, 0], [0, Infinity], [0, 536870912], [4294967296, 0]] as const) {
+      assert.throws(() => reference.bufferViewLength(offset, length), RangeError);
+      assert.throws(() => call(instance.exports, "bufferViewLength", offset, length));
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

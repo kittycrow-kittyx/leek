@@ -5,3 +5,5 @@
 `librarySymbol` checks whether a symbol has a declaration in TypeScript's standard library. Typed-array recognition, numeric operations and Map default analysis share this check.
 
 `integerStorage(source, checker)` returns the symbols of function-local bindings whose complete use permits modulo-32 storage. Initialisers and assignments must produce 32-bit integers; every read must be an operand of a recognised integer operation. Captured variables, ordinary Number reads, value-producing assignments, arithmetic updates and arbitrary numeric writes retain Number storage. Integer typed-array iteration bindings are eligible under the same read/write restrictions. Float-array bindings are excluded. These conservative facts supply a capability absent from the pinned compiler; they do not change source-level TypeScript types or narrow general Number arithmetic.
+
+`typedArrays` is the shared standard typed-array name catalogue used by array recognition and native buffer-view adapters.

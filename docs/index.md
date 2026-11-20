@@ -22,6 +22,7 @@ Install the pinned dependencies and run `bun run build` before changing the lowe
 - [Local capture analysis](modules/lower/captures.md)
 - [Local function lowering](modules/lower/closures.md)
 - [Generated names](modules/lower/names.md)
+- [Native buffer views](modules/lower/views.md)
 - [Native integer facts](modules/lower/integers.md)
 - [Typed-array loop adapter](modules/lower/loops.md)
 - [Source staging](modules/lower/index.md)

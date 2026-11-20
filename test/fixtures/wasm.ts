@@ -318,3 +318,28 @@ export function optionalPointEquality(index: number): number {
   return ((value.codePointAt(index) ?? null) === 0 ? 1 : 0) + ((value.codePointAt(index) ?? null) === 128512 ? 2 : 0) +
     ((value.codePointAt(index) ?? null) === null ? 4 : 0);
 }
+
+export function bufferViewAlias(offset: number, length: number): number {
+  const buffer = new ArrayBuffer(32);
+  const all = new BigInt64Array(buffer);
+  const view = new BigInt64Array(buffer, offset, length);
+  if (view.length > 0) view[0] = -7n;
+  return view.length * 100 + view.byteOffset + (view.buffer === buffer ? 1 : 0) +
+    ((all[view.byteOffset / 8] ?? 0n) === -7n ? 2 : 0) + new Uint8Array().length;
+}
+
+export function mixedBufferViews(): number {
+  const buffer = new ArrayBuffer(16);
+  const bytes = new Uint8Array(buffer);
+  const words = new Uint16Array(buffer, 2, 2);
+  words[0] = 0x1234;
+  const unsigned = new BigUint64Array(buffer, 8, 1);
+  const signed = new BigInt64Array(buffer, 8);
+  unsigned[0] = 18446744073709551615n;
+  return (bytes[2] ?? 0) + (bytes[3] ?? 0) * 256 + ((signed[0] ?? 0n) === -1n ? 65536 : 0);
+}
+
+export function bufferViewLength(offset: number, length: number): number {
+  const view = new BigInt64Array(new ArrayBuffer(32), offset, length);
+  return view.length;
+}

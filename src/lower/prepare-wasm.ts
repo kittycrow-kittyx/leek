@@ -3,6 +3,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 import type { LoweredProject } from "./index.ts";
 import { lowerWasm, multiplyReference, floatReference, integerReference, uncheckedReference } from "./wasm.ts";
+import { viewReference } from "./views.ts";
 import { lowerNullable, referenceRead } from "./nullish.ts";
 import { lowerClosures } from "./closures.ts";
 import { lowerRequired } from "./required.ts";
@@ -62,6 +63,7 @@ export function prepareWasmSource(input: LoweredProject): string[] {
     if (output.usesPredicates) references.add(floatReference);
     if (output.usesCoercion) references.add(integerReference);
     if (output.usesUnchecked) references.add(uncheckedReference);
+    for (const name of output.views) references.add(viewReference(name));
     return output.text;
   }, intrinsic);
   if (!references.size) return [];
