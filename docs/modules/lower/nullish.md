@@ -10,6 +10,8 @@ Indexed defaults on strings and typed arrays capture the receiver and numeric in
 
 Typed-array index lowering accepts Number fallbacks. The source `values[index] ?? null` retains its original form pending optional primitive storage.
 
+Reference-array `pop` and `shift` defaults capture the receiver and check its length before calling the existing array operation. Empty arrays select the fallback without invoking the native operation. A removed reference hole also selects the fallback. Bake lowers the resulting nullable selection after the checker is rebuilt.
+
 `nullableAliases` maps the checked `LeekArrayIndex` cast to native i32 after the bounds and integrality checks. Generated indexed bindings reject collisions with existing source identifiers.
 
 | Checking type | Native type |

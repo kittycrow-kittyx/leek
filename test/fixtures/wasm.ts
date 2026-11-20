@@ -131,3 +131,14 @@ export function indexedReadonly(index: number): number {
   const value = values[index] ?? "?";
   return value.length;
 }
+
+export function removedReference(which: number): number {
+  const values: string[] = new Array<string>(3);
+  values[0] = ""; values[2] = "last";
+  let result = 0;
+  for (let step = 0; step < 4; step++) {
+    const value = which === 0 ? values.pop() ?? "missing" : values.shift() ?? "missing";
+    result = result * 10 + value.length;
+  }
+  return result + values.length;
+}

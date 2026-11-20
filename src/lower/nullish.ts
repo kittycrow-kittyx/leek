@@ -55,6 +55,14 @@ function mapLookup(expression: ts.Expression, checker: ts.TypeChecker): MapLooku
   return receiverNode && keyNode ? { receiver, key, receiverType: receiverNode, keyType: keyNode } : null;
 }
 
+function referenceRemoval(expression: ts.Expression, checker: ts.TypeChecker): ts.PropertyAccessExpression | null {
+  const call = unwrap(expression);
+  if (!ts.isCallExpression(call) || call.arguments.length || (call.questionDotToken ?? null) || !ts.isPropertyAccessExpression(call.expression)) return null;
+  const member = call.expression;
+  if ((member.questionDotToken ?? null) || !["pop", "shift"].includes(member.name.text) || indexedKind(member.expression, checker) !== "reference") return null;
+  return librarySymbol(checker.getSymbolAtLocation(member.name) ?? null) ? member : null;
+}
+
 function guaranteedPresent(expression: ts.Expression, checker: ts.TypeChecker): boolean {
   const node = unwrap(expression);
   if (ts.isLiteralExpression(node) || ts.isTemplateExpression(node) || ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node) || ts.isNewExpression(node)) return true;
@@ -141,6 +149,20 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
       }
       const lookup = mapLookup(node.left, checker);
       const resultType = checker.typeToTypeNode(checker.getTypeAtLocation(node), node, ts.NodeBuilderFlags.NoTruncation) ?? null;
+      const removal = referenceRemoval(node.left, checker);
+      const removalType = removal ? checker.typeToTypeNode(checker.getTypeAtLocation(removal.expression), removal, ts.NodeBuilderFlags.NoTruncation) ?? null : null;
+      if (removal && removalType && resultType) {
+        const receiver = fresh();
+        scope.push(nativeVariable(receiver, removalType, null));
+        const value = factory.createNonNullExpression(factory.createCallExpression(factory.createPropertyAccessExpression(receiver, removal.name.text), [], []));
+        const present = factory.createBinaryExpression(factory.createPropertyAccessExpression(receiver, "length"), ts.SyntaxKind.GreaterThanToken, factory.createNumericLiteral(0));
+        const selected = factory.createConditionalExpression(present, factory.createToken(ts.SyntaxKind.QuestionToken), value, factory.createToken(ts.SyntaxKind.ColonToken), factory.createNull());
+        changed = true;
+        return factory.createSatisfiesExpression(factory.createParenthesizedExpression(factory.createCommaListExpression([
+          factory.createAssignment(receiver, ts.visitNode(removal.expression, visit, ts.isExpression) ?? removal.expression),
+          factory.createBinaryExpression(factory.createParenthesizedExpression(selected), ts.SyntaxKind.QuestionQuestionToken, ts.visitNode(node.right, visit, ts.isExpression) ?? node.right)
+        ])), resultType);
+      }
       const indexed = unwrap(node.left);
       const kind = ts.isElementAccessExpression(indexed) && !(indexed.questionDotToken ?? null) ? indexedKind(indexed.expression, checker) : null;
       const index = ts.isElementAccessExpression(indexed) ? indexed.argumentExpression ?? null : null;

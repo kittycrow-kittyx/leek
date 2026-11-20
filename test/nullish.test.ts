@@ -131,6 +131,17 @@ test("indexed native bindings reject source name collisions", () => {
   assert.throws(() => check('function LeekReferenceAt(): void {} function run(i: number): string { return ["value"][i] ?? "missing"; }'), /reserved indexed binding LeekReferenceAt/);
 });
 
+test("reference removals preserve mutation, holes, receiver effects and lazy defaults", () => {
+  const source = `export {};
+const events: string[] = [];
+const values = new Array<string>(3); values[0] = ""; values[2] = "last";
+function receiver(): string[] { events.push("receiver"); return values; }
+function fallback(): string { events.push("fallback:" + values.length); return "missing"; }
+function run(): string[] { return [receiver().pop() ?? fallback(), receiver().shift() ?? fallback(), receiver().pop() ?? fallback(), receiver().shift() ?? fallback()]; }
+console.log(JSON.stringify([run(), values.length, events]));`;
+  assert.equal(check(source), check(source, false));
+});
+
 test("typed-array defaults requiring optional primitive storage retain their source form", () => {
   const source = 'function run(values: Uint8Array, index: number): number | null { return values[index] ?? null; }';
   const root = mkdtempSync(join(tmpdir(), "leek-nullable-number-"));
