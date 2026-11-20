@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { functionOwner } from "./function-body.ts";
 import { unwrap } from "./integers.ts";
 import { librarySymbol } from "./integers.ts";
 
@@ -29,11 +30,8 @@ function valueSymbol(node: ts.Identifier, checker: ts.TypeChecker): ts.Symbol | 
 }
 
 function methodOwner(node: ts.Node): ts.MethodDeclaration | null {
-  for (let current = node.parent; current; current = current.parent) {
-    if (ts.isMethodDeclaration(current)) return current;
-    if (ts.isFunctionLike(current)) return null;
-  }
-  return null;
+  const owner = functionOwner(node);
+  return owner && ts.isMethodDeclaration(owner) ? owner : null;
 }
 
 function promiseCallback(arrow: ts.ArrowFunction, checker: ts.TypeChecker): boolean {

@@ -1,18 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
-import { withTransformedSource } from "./transformed-source.ts";
+import { withTransformedSource, compareTransformedExecution } from "./transformed-source.ts";
 import { lowerClosures } from "../src/lower/closures.ts";
 
 function transform(text: string, execute: boolean): { text: string; output: string } {
-  return withTransformedSource(text, lowerClosures, (file, output) => {
-    const result = execute ? execFileSync(process.execPath, [file], { encoding: "utf8" }) : "";
-    writeFileSync(file, text);
-    const expected = execute ? execFileSync(process.execPath, [file], { encoding: "utf8" }) : "";
-    assert.equal(result, expected);
-    return { text: output, output: result };
-  });
+  return execute ? compareTransformedExecution(text, lowerClosures) : withTransformedSource(text, lowerClosures, (_file, output) => ({ text: output, output: "" }));
 }
 
 test("local recursive async functions retain their receiver, private access and mutable state", () => {

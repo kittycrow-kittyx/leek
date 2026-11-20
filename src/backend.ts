@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { requireBake, requirePin, type Target } from "./project.ts";
 import type { LoweredProject } from "./lower/index.ts";
-import { prepareWasmSource } from "./lower/wasm.ts";
+import { prepareWasmSource } from "./lower/prepare-wasm.ts";
 import { emitWasm } from "./wasm.ts";
 
 const compilers = { wasm: "baguette", clang: "croissant", rust: "crust" } as const;

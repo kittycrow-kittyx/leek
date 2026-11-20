@@ -53,6 +53,8 @@ function checkNumbers(exports: WebAssembly.Exports): void {
     assert.equal(call(exports, "nullablePredicate", present, selected), reference.nullablePredicate(present, selected));
     assert.equal(call(exports, "predicateReceiver", present, selected), reference.predicateReceiver(present, selected));
   }
+  const caught = { localCaught: reference.localCaught, localReturn: reference.localReturn, localIgnored: reference.localIgnored, localNested: reference.localNested };
+  for (const [name, operation] of Object.entries(caught)) for (const input of [-Infinity, -7, -0, 0, 1, 4, Infinity, NaN]) assert.equal(call(exports, name, input), operation(input));
   const operations = { multiply: reference.multiply, xor: reference.xor, and: reference.and, or: reference.or,
     shl: reference.shl, shr: reference.shr, ushr: reference.ushr };
   const values = numericCases();

@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { stageSource } from "../src/lower/index.ts";
-import { prepareWasmSource } from "../src/lower/wasm.ts";
+import { prepareWasmSource } from "../src/lower/prepare-wasm.ts";
 
 function put(root: string, path: string, text: string): void {
   mkdirSync(dirname(join(root, path)), { recursive: true });

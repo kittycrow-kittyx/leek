@@ -252,3 +252,43 @@ export function predicateReceiver(present: number, selected: number): number {
   const receiver = new PredicateReceiver();
   return receiver.run(present === 0 ? null : selected === 0 ? "" : "-S");
 }
+
+
+export function localCaught(input: number): number {
+  let total = 0;
+  for (let index = 0; index < 3; index++) {
+    try {
+      if (input < 0) throw new Error("negative");
+      total += input + index;
+    } catch (error) { total += error instanceof Error ? error.message.length : 0; }
+  }
+  return total;
+}
+
+export function localReturn(input: number): number {
+  try { if (input < 0) throw new Error("bad"); return input + 1; }
+  catch (error) { return error instanceof Error ? error.message.length : 0; }
+}
+
+export function localIgnored(input: number): number {
+  try { if (input < 0) throw new Error("bad"); return input; }
+  catch { return 7; }
+}
+
+
+export function localNested(input: number): number {
+  let total = 0;
+  try {
+    for (let outer = 0; outer < 3; outer++) {
+      for (let inner = 0; inner < 3; inner++) {
+        if (input === 1) continue;
+        total++;
+        if (input < 0) throw new Error("nested");
+        if (input === 0) break;
+      }
+      total += 10;
+    }
+    total += 100;
+  } catch (error) { total += error instanceof Error ? error.message.length : 0; }
+  return total;
+}

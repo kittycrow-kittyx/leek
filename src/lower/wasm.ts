@@ -1,17 +1,11 @@
-import { readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import ts from "typescript";
 import { nativeVariable } from "../../baguette/src/ast.ts";
-import type { LoweredProject } from "./index.ts";
 import { numericCall } from "./numeric.ts";
 import { arrayType, integerOperation, integerStorage, integerValue, nativeWidths, signed, unsigned, unwrap } from "./integers.ts";
 import { lowerArrayLoop } from "./loops.ts";
-import { lowerNullable, referenceRead } from "./nullish.ts";
-import { lowerClosures } from "./closures.ts";
-import { lowerRequired } from "./required.ts";
-import { lowerPlatform } from "./platform.ts";
 
-const intrinsicFile = "__leek_wasm_intrinsics.ts";
 
 // Bake checks these reference contracts; Baguette omits their bodies and uses
 // its pinned native prelude and AssemblyScript standard library instead.
@@ -137,72 +131,6 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
     const body = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed }).printFile(result.transformed[0] ?? source);
     return { text: imports + aliases + body, ...flags };
   } finally { result.dispose(); }
-}
-
-interface StagedGraph { files: string[]; options: ts.CompilerOptions; root: string }
-
-function stagedGraph(input: LoweredProject): StagedGraph {
-  const config = ts.readJsonConfigFile(input.project, ts.sys.readFile);
-  const parsed = ts.parseJsonSourceFileConfigFileContent(config, ts.sys, dirname(input.project), {}, input.project);
-  if (parsed.errors.length) throw new Error(parsed.errors.map(error => ts.flattenDiagnosticMessageText(error.messageText, "\n")).join("\n"));
-  return { files: parsed.fileNames, options: parsed.options, root: resolve(dirname(input.project), "source") };
-}
-
-/** Each phase resolves the previous phase's written source and validates every path before rewriting a file. */
-function rewriteGraph(graph: StagedGraph, lower: (file: ts.SourceFile, checker: ts.TypeChecker) => string, exclude = ""): void {
-  const program = ts.createProgram(graph.files, graph.options);
-  const checker = program.getTypeChecker();
-  for (const file of stagedFiles(program, graph.root).filter(file => file.fileName !== exclude)) {
-    const output = lower(file, checker);
-    if (output !== file.text) writeFileSync(file.fileName, output);
-  }
-}
-
-function intrinsicPath(file: ts.SourceFile, intrinsic: string): string {
-  const path = relative(dirname(file.fileName), intrinsic).split(sep).join("/").replace(/\.ts$/, ".js");
-  return path.startsWith(".") ? path : "./" + path;
-}
-
-/** Apply the WASM extension to the staged graph before Baguette's mandatory Bake stage. */
-export function prepareWasmSource(input: LoweredProject): string[] {
-  const graph = stagedGraph(input);
-  const intrinsic = resolve(graph.root, intrinsicFile);
-  const references = new Set<string>();
-  rewriteGraph(graph, lowerPlatform);
-  rewriteGraph(graph, lowerClosures);
-  rewriteGraph(graph, (file, checker) => {
-    const output = lowerNullable(file, checker, intrinsicPath(file, intrinsic));
-    if (output.usesReferenceRead) references.add(referenceRead);
-    return output.text;
-  });
-  const referenceModuleWritten = references.size > 0;
-  if (referenceModuleWritten) writeFileSync(intrinsic, [...references].join(""), { flag: "wx" });
-  rewriteGraph(graph, (file, checker) => lowerNullable(file, checker).text, intrinsic);
-  const program = ts.createProgram(graph.files, graph.options);
-  const checker = program.getTypeChecker();
-  for (const [file, text] of lowerRequired(stagedFiles(program, graph.root).filter(file => file.fileName !== intrinsic), checker)) {
-    if (text !== readFileSync(file, "utf8")) writeFileSync(file, text);
-  }
-  rewriteGraph(graph, (file, checker) => {
-    const output = lowerWasm(file, checker, intrinsicPath(file, intrinsic));
-    if (output.usesMultiply) references.add(multiplyReference);
-    if (output.usesPredicates) references.add(floatReference);
-    if (output.usesCoercion) references.add(integerReference);
-    if (output.usesUnchecked) references.add(uncheckedReference);
-    return output.text;
-  }, intrinsic);
-  if (!references.size) return [];
-  writeFileSync(intrinsic, [...references].join(""), { flag: referenceModuleWritten ? "w" : "wx" });
-  return [intrinsic];
-}
-
-function stagedFiles(program: ts.Program, root: string): ts.SourceFile[] {
-  const files = program.getSourceFiles().filter(file => !file.isDeclarationFile && !program.isSourceFileFromExternalLibrary(file));
-  for (const file of files) {
-    const path = relative(root, realpathSync(file.fileName));
-    if (isAbsolute(path) || path === ".." || path.startsWith(".." + sep)) throw new Error("WASM source outside staging tree: " + file.fileName);
-  }
-  return files;
 }
 
 /** Alias existing native operations without reserving canonical source names. */

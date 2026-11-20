@@ -6,3 +6,9 @@ export function functionBody(node: ts.Node): ts.ConciseBody | null {
     ts.isMethodDeclaration(node) || ts.isConstructorDeclaration(node) || ts.isGetAccessorDeclaration(node) ||
     ts.isSetAccessorDeclaration(node) ? node.body ?? null : null;
 }
+
+/** Return the nearest enclosing function-like node, or null for file-level bindings. */
+export function functionOwner(node: ts.Node): ts.Node | null {
+  for (let current = node.parent; current; current = current.parent) if (ts.isFunctionLike(current)) return current;
+  return null;
+}

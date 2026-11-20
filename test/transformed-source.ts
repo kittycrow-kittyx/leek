@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,4 +22,16 @@ export function withTransformedSource<T>(text: string, lower: (source: ts.Source
     assert.deepEqual(ts.getPreEmitDiagnostics(checked).map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")), []);
     return verify(file, output);
   } finally { rmSync(root, { recursive: true, force: true }); }
+}
+
+
+/** Compare observable output after checking the transformed source, using a separate process for each programme. */
+export function compareTransformedExecution(text: string, lower: (source: ts.SourceFile, checker: ts.TypeChecker) => string): { text: string; output: string } {
+  return withTransformedSource(text, lower, (file, output) => {
+    const actual = execFileSync(process.execPath, [file], { encoding: "utf8" });
+    writeFileSync(file, text);
+    const expected = execFileSync(process.execPath, [file], { encoding: "utf8" });
+    assert.equal(actual, expected);
+    return { text: output, output: actual };
+  });
 }

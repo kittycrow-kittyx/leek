@@ -1,12 +1,10 @@
 import ts from "typescript";
+import { functionOwner } from "./function-body.ts";
 
 const absent = new Set(["process", "navigator"]);
 type Constant = string | number | boolean | null;
 
-function owner(node: ts.Node): ts.Node {
-  for (let current = node.parent; current; current = current.parent) if (ts.isFunctionLike(current) || ts.isSourceFile(current)) return current;
-  return node.getSourceFile();
-}
+function owner(node: ts.Node): ts.Node { return functionOwner(node) ?? node.getSourceFile(); }
 
 function literal(node: ts.Expression): { value: Constant } | null {
   if (node.kind === ts.SyntaxKind.NullKeyword) return { value: null };
