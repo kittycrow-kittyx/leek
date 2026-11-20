@@ -22,9 +22,8 @@ Leek stages that graph without maintaining another kernel or userspace source tr
 Source analysis and lowering are available for all three targets. The
 WebAssembly path uses the released Baguette compiler process, including its
 mandatory Bake stage. The boot entry currently fails on exceptions, captured
-async callbacks and host globals. Its Host argument and Os result also need a
-numeric ABI. Resolving the full canonical graph does not establish that the OS
-has compiled or booted. C and Rust work is deferred.
+async callbacks and host globals. Its Host argument and Os result need a
+numeric ABI.
 
 ## Requirements
 
@@ -57,9 +56,8 @@ build links the modular layout and compiles it through Binaryen.
 
 `build/wasm/source-manifest.json` records each original source module and its
 SHA-256 before transformation. Successful emission copies it to
-`canonical-source.json` beside the output. Original sources and dependency pins
-remain unchanged. Unsupported constructs fail the build, without excluding modules
-or running the OS in a TypeScript fallback.
+`canonical-source.json` beside the output. Bake writes lowering diagnostics to
+`build/wasm/build/baguette-bake/bake-report.json`.
 
 ## Documentation
 
