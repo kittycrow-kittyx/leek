@@ -49,6 +49,10 @@ function checkNumbers(exports: WebAssembly.Exports): void {
     assert.equal(call(exports, "indexedBigInt", index), reference.indexedBigInt(index));
     for (const variant of [0, 1, 2, 3]) assert.equal(call(exports, "requiredBigInt", index, variant), reference.requiredBigInt(index, variant));
   }
+  for (const present of [0, 1]) for (const selected of [0, 1]) {
+    assert.equal(call(exports, "nullablePredicate", present, selected), reference.nullablePredicate(present, selected));
+    assert.equal(call(exports, "predicateReceiver", present, selected), reference.predicateReceiver(present, selected));
+  }
   const operations = { multiply: reference.multiply, xor: reference.xor, and: reference.and, or: reference.or,
     shl: reference.shl, shr: reference.shr, ushr: reference.ushr };
   const values = numericCases();

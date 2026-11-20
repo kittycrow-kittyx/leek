@@ -30,3 +30,5 @@ BigInt64Array and BigUint64Array defaults use the same bounds and integrality gu
 Standard string `codePointAt(index)` defaults reuse the same captured index and bounds checks. The index truncates towards zero without negative wrapping, and a validated native code-point read remains distinct from a missing result. Null fallbacks retain their optional primitive form until the immediate-consumer pass can provide separate presence storage. Tests include surrogate pairs, lone surrogates, fractional indices, NaN and infinities.
 
 Standard library interfaces derived from Array, including regular-expression match arrays, share reference-array index handling. Missing captures select the fallback and empty captures remain present. User-defined array-like classes retain their original expressions. This does not supply a native regular-expression engine.
+
+Nullable predicate applications used only as conditions can inline a proven guard-and-callback helper. The [application analysis](application.md) verifies the original helper body and preserves predicate timing without storing a nullable Boolean.

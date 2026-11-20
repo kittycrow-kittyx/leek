@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
+import { withTransformedSource } from "./transformed-source.ts";
 import { lowerNullable, referenceRead } from "../src/lower/nullish.ts";
 
 function check(input: string, transform = true): string {
@@ -212,4 +213,32 @@ function run(input: string, index: number): string {
 }
 console.log(JSON.stringify(["", "a", "bbb", "abbb", "x"].flatMap(input => [-1,-0,0,0.5,1,2,3,NaN,Infinity].map(index => run(input,index))), events));`;
   assert.equal(check(source), check(source, false));
+});
+
+
+test("nullable predicate applications preserve lazy effects and truth-only results", () => {
+  const source = `const events: string[] = [];
+function apply<T,R>(value: T | null, use: (value:T)=>R): R | null { if (value === null) return null; return use(value); }
+function input(value: string | null): string | null { events.push("input"); return value; }
+function predicate(value: string): boolean { events.push("predicate:" + value); return value.startsWith("-"); }
+function run(value: string | null): number {
+  if (apply(input(value), item => predicate(item)) ?? null) return 1;
+  return !!(apply(input(value), item => predicate(item)) ?? null) ? 2 : 3;
+}
+console.log(JSON.stringify([[null,"", "-S", "plain"].map(run), events]));`;
+  assert.equal(check(source), check(source, false));
+});
+
+
+test("nullable applications retain value contexts, effectful helpers and generator semantics", () => {
+  const helper = 'function apply<T,R>(value:T|null,use:(value:T)=>R):R|null { if(value===null)return null; return use(value); }';
+  const sources = [
+    helper + ' function run(value:{flag:boolean}|null):boolean|null { return apply(value,item=>item.flag) ?? null; }',
+    helper + ' function run(value:{flag:boolean}|null):boolean { if(apply(value,item=>item.flag) ?? true)return true; return false; }',
+    'function apply<T,R>(value:T|null,use:(value:T)=>R):R|null { console.log("helper"); if(value===null)return null; return use(value); } function run(value:{flag:boolean}|null):boolean { return !!(apply(value,item=>item.flag) ?? null); }',
+    'function* apply<T,R>(value:T|null,use:(value:T)=>R):Generator<never,R|null,unknown> { if(value===null)return null; return use(value); } function run(value:{flag:boolean}|null):boolean { return !!(apply(value,item=>item.flag) ?? null); }',
+    helper + ' function run(value:{flag:boolean}|null):boolean { return !!(apply(value,item=>(item={flag:false},item.flag)) ?? null); }',
+    helper + ' let current = apply; current = <T,R>(_value:T|null,_use:(value:T)=>R):R|null => null; function run(value:{flag:boolean}|null):boolean { return !!(current(value,item=>item.flag) ?? null); }'
+  ];
+  for (const source of sources) withTransformedSource(source, (input, checker) => lowerNullable(input, checker).text, (_file, output) => assert.equal(output, source));
 });

@@ -6,6 +6,7 @@ import { arrayType, librarySymbol, unwrap } from "./integers.ts";
 import { identifiers } from "./names.ts";
 import { indexGuard, indexCast, integerIndex } from "./index-access.ts";
 import { mapLookup } from "./map-lookup.ts";
+import { appliedExpression, nullableApplication } from "./application.ts";
 import { functionBody } from "./function-body.ts";
 
 export interface NullableLowering {
@@ -131,6 +132,19 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
       const scope = scopes[scopes.length - 1] ?? null;
       if (!scope || !ts.isBinaryExpression(node) || node.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken || suspended(node)) {
         return ts.visitEachChild(node, visit, context);
+      }
+      const application = nullableApplication(node, checker);
+      if (application) {
+        const cache = fresh();
+        scope.push(nativeVariable(cache, application.type, null));
+        const body = appliedExpression(application, factory.createNonNullExpression(cache), checker);
+        const applied = ts.visitNode(body, visit, ts.isExpression) ?? body;
+        changed = true;
+        return factory.createSatisfiesExpression(factory.createParenthesizedExpression(factory.createCommaListExpression([
+          factory.createAssignment(cache, ts.visitNode(application.input, visit, ts.isExpression) ?? application.input),
+          factory.createConditionalExpression(factory.createBinaryExpression(cache, ts.SyntaxKind.ExclamationEqualsEqualsToken, factory.createNull()),
+            factory.createToken(ts.SyntaxKind.QuestionToken), applied, factory.createToken(ts.SyntaxKind.ColonToken), factory.createFalse())
+        ])), factory.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword));
       }
       const lookup = mapLookup(node.left, checker);
       const resultType = checker.typeToTypeNode(checker.getTypeAtLocation(node), node, ts.NodeBuilderFlags.NoTruncation) ?? null;

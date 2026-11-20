@@ -224,3 +224,30 @@ class SynchronousCapture {
 }
 
 export function synchronousCapture(input: number): number { return new SynchronousCapture().run(input); }
+
+
+function applyPresent<T,R>(value: T | null, use: (value:T)=>R): R | null {
+  if (value === null) return null;
+  return use(value);
+}
+
+export function nullablePredicate(present: number, selected: number): number {
+  let calls = 0;
+  const value: string | null = present === 0 ? null : selected === 0 ? "" : "-S";
+  const matched = (applyPresent(value, item => item.startsWith("-")) ?? null) ? 1 : 0;
+  const result = !!(applyPresent(value, item => (calls++, item.startsWith("-"))) ?? null);
+  return matched * 10 + (result ? 2 : 0) + calls;
+}
+
+
+class PredicateReceiver {
+  private prefix = "-";
+  run(value: string | null): number {
+    return (applyPresent(value, item => item.startsWith(this.prefix)) ?? null) ? 1 : 0;
+  }
+}
+
+export function predicateReceiver(present: number, selected: number): number {
+  const receiver = new PredicateReceiver();
+  return receiver.run(present === 0 ? null : selected === 0 ? "" : "-S");
+}
