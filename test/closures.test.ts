@@ -1,31 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import ts from "typescript";
+import { writeFileSync } from "node:fs";
+import { withTransformedSource } from "./transformed-source.ts";
 import { lowerClosures } from "../src/lower/closures.ts";
 
 function transform(text: string, execute: boolean): { text: string; output: string } {
-  const root = mkdtempSync(join(tmpdir(), "leek-captures-"));
-  try {
-    const file = join(root, "source.ts");
-    writeFileSync(file, text);
-    const options: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, strict: true, types: [], noEmit: true };
-    const program = ts.createProgram([file], options);
-    const source = program.getSourceFile(file) ?? null;
-    assert.ok(source);
-    const output = lowerClosures(source, program.getTypeChecker());
-    writeFileSync(file, output);
-    const checked = ts.createProgram([file], options);
-    assert.deepEqual(ts.getPreEmitDiagnostics(checked).map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")), []);
+  return withTransformedSource(text, lowerClosures, (file, output) => {
     const result = execute ? execFileSync(process.execPath, [file], { encoding: "utf8" }) : "";
     writeFileSync(file, text);
     const expected = execute ? execFileSync(process.execPath, [file], { encoding: "utf8" }) : "";
     assert.equal(result, expected);
     return { text: output, output: result };
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  });
 }
 
 test("local recursive async functions retain their receiver, private access and mutable state", () => {

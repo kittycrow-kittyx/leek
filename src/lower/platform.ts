@@ -80,6 +80,12 @@ function blockBody(node: ts.Block, visit: ts.Visitor<ts.Node, ts.Node>, checker:
   return ts.factory.updateBlock(node, statements);
 }
 
+/** Removing a branch must not remove function-scoped var declarations from that branch. */
+function hoistsVar(node: ts.Node): boolean {
+  if (ts.isFunctionLike(node)) return false;
+  return ts.isVariableDeclarationList(node) && !(node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) || (ts.forEachChild(node, hoistsVar) ?? false);
+}
+
 /** Resolve only probes for absent native globals; user implementations retain their bindings. */
 export function lowerPlatform(source: ts.SourceFile, checker: ts.TypeChecker): string {
   const values: Bindings = new Map<ts.Symbol, Binding>();
@@ -114,7 +120,9 @@ export function lowerPlatform(source: ts.SourceFile, checker: ts.TypeChecker): s
         const value = literal(test);
         changed ||= value !== null;
         const branch = value && value.value ? node.thenStatement : node.elseStatement ?? null;
-        return value ? branch ? ts.visitNode(branch, visit, ts.isStatement) ?? branch : f.createEmptyStatement() : ts.visitEachChild({ ...node, expression: test }, visit, context);
+        const discarded = value && value.value ? node.elseStatement ?? null : node.thenStatement;
+        const removable = value && !(discarded && hoistsVar(discarded));
+        return removable ? branch ? ts.visitNode(branch, visit, ts.isStatement) ?? branch : f.createEmptyStatement() : ts.visitEachChild({ ...node, expression: test }, visit, context);
       }
       if (ts.isBlock(node)) return blockBody(node, visit, checker, () => { changed = true; });
       return ts.visitEachChild(node, visit, context);
