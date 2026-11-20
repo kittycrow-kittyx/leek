@@ -166,3 +166,16 @@ test("typed-array defaults requiring optional primitive storage retain their sou
     assert.equal(lowerNullable(input, program.getTypeChecker()).text, source);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("primitive map defaults retain diagnostics until missing values have distinct storage", () => {
+  const source = 'function run(values: Map<string, number>, key: string): number | null { return values.get(key) ?? null; }';
+  const root = mkdtempSync(join(tmpdir(), "leek-nullable-map-"));
+  try {
+    const file = join(root, "entry.ts");
+    writeFileSync(file, source);
+    const program = ts.createProgram([file], { strict: true, types: [], target: ts.ScriptTarget.ES2022 });
+    const input = program.getSourceFile(file) ?? null;
+    assert.ok(input);
+    assert.equal(lowerNullable(input, program.getTypeChecker()).text, source);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

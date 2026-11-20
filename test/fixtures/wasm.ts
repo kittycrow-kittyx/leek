@@ -163,3 +163,14 @@ export function requiredNumber(index: number, value: number): number {
   values[0] = value;
   return requiredOr(values[index] ?? null, -7);
 }
+
+export function requiredMap(present: number, value: number): number {
+  const values: Map<string, number> = new Map<string, number>();
+  if (present !== 0) values.set("key", value);
+  return requiredOr(values.get("key") ?? null, -7);
+}
+
+export function nativeEnvironment(): number {
+  if (typeof navigator === "undefined") return 1;
+  return navigator.hardwareConcurrency;
+}

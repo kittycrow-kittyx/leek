@@ -10,6 +10,8 @@ Indexed defaults on strings and typed arrays capture the receiver and numeric in
 
 Typed-array index lowering accepts Number fallbacks. The source `values[index] ?? null` retains its original form pending optional primitive storage.
 
+Primitive Map values also require fallbacks in the same native storage family. A numeric Map lookup with a null fallback retains its source form pending separate presence storage.
+
 Reference-array `pop` and `shift` defaults capture the receiver and check its length before calling the existing array operation. Empty arrays select the fallback without invoking the native operation. A removed reference hole also selects the fallback. Bake lowers the resulting nullable selection after the checker is rebuilt.
 
 Standard `at(index)` defaults share indexed lowering. The index is truncated towards zero and negative indices are offset from the captured receiver's length. The bounds check precedes the native read. NaN and signed zero select index zero; infinite indices select the fallback.

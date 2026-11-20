@@ -39,6 +39,7 @@ function numericCases(): number[] {
 }
 
 function checkNumbers(exports: WebAssembly.Exports): void {
+  assert.equal(call(exports, "nativeEnvironment"), 1, "native WASM uses the source fallback for absent browser capabilities");
   const operations = { multiply: reference.multiply, xor: reference.xor, and: reference.and, or: reference.or,
     shl: reference.shl, shr: reference.shr, ushr: reference.ushr };
   const values = numericCases();
@@ -50,6 +51,7 @@ function checkNumbers(exports: WebAssembly.Exports): void {
   for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "mapDefault", present, value), reference.mapDefault(present, value));
   for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "mapReferenceDefault", present, value), reference.mapReferenceDefault(present, value));
   for (const value of values) for (const index of [-1, -0, 0, 0.5, 1, NaN, Infinity]) assert.equal(call(exports, "requiredNumber", index, value), reference.requiredNumber(index, value));
+  for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "requiredMap", present, value), reference.requiredMap(present, value));
   for (const value of [0, 1]) assert.equal(call(exports, "nullableEffect", value), reference.nullableEffect(value));
   for (const value of [0, 1]) assert.equal(call(exports, "removedReference", value), reference.removedReference(value));
   const indexed = { indexedByte: reference.indexedByte, indexedString: reference.indexedString, indexedReference: reference.indexedReference, indexedObject: reference.indexedObject, indexedReadonly: reference.indexedReadonly, relativeReference: reference.relativeReference, relativeString: reference.relativeString };

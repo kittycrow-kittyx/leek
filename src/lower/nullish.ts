@@ -5,14 +5,8 @@ import { createBakeCoreEngine } from "../../baguette/bake/src/core-engine.ts";
 import { arrayType, librarySymbol, unwrap } from "./integers.ts";
 import { identifiers } from "./names.ts";
 import { indexGuard, indexCast } from "./index-access.ts";
+import { mapLookup } from "./map-lookup.ts";
 import { functionBody } from "./function-body.ts";
-
-interface MapLookup {
-  receiver: ts.Expression;
-  key: ts.Expression;
-  receiverType: ts.TypeNode;
-  keyType: ts.TypeNode;
-}
 
 export interface NullableLowering {
   text: string;
@@ -33,28 +27,16 @@ function indexedKind(receiver: ts.Expression, checker: ts.TypeChecker): "string"
   return element && reference(element) ? "reference" : null;
 }
 
-function mapLookup(expression: ts.Expression, checker: ts.TypeChecker): MapLookup | null {
-  const node = unwrap(expression);
-  if (!ts.isCallExpression(node) || node.arguments.length !== 1 || (node.questionDotToken ?? null) || !ts.isPropertyAccessExpression(node.expression) ||
-      (node.expression.questionDotToken ?? null) || node.expression.name.text !== "get") return null;
-  const receiver = node.expression.expression;
-  const type = checker.getTypeAtLocation(receiver);
-  const symbol = type.getSymbol() ?? null;
-  const setter = type.getProperty("set") ?? null;
-  if (!symbol || symbol.getName() !== "Map" || !librarySymbol(symbol) || !setter) return null;
-  const signature = checker.getSignaturesOfType(checker.getTypeOfSymbolAtLocation(setter, receiver), ts.SignatureKind.Call)[0] ?? null;
-  const keyParameter = signature ? signature.parameters[0] ?? null : null;
-  const valueParameter = signature ? signature.parameters[1] ?? null : null;
-  const key = node.arguments[0] ?? null;
-  if (!key || ts.isSpreadElement(key) || !keyParameter || !valueParameter) return null;
-  const keyType = checker.getTypeOfSymbolAtLocation(keyParameter, receiver);
-  const valueType = checker.getTypeOfSymbolAtLocation(valueParameter, receiver);
-  const concrete = (item: ts.Type): boolean => item.isUnion() ? item.types.every(concrete) :
-    Boolean(item.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.StringLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.BigIntLike | ts.TypeFlags.Object));
-  if (!concrete(keyType) || !concrete(valueType)) return null;
-  const receiverNode = checker.typeToTypeNode(type, node, ts.NodeBuilderFlags.NoTruncation) ?? null;
-  const keyNode = checker.typeToTypeNode(keyType, node, ts.NodeBuilderFlags.NoTruncation) ?? null;
-  return receiverNode && keyNode ? { receiver, key, receiverType: receiverNode, keyType: keyNode } : null;
+/** Primitive map values need a fallback in the same storage family; null requires separate presence storage. */
+function mapFallback(value: ts.Type, fallback: ts.Type): boolean {
+  const parts = value.isUnion() ? value.types : [value];
+  const primitives = ts.TypeFlags.NumberLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.BigIntLike;
+  if (!parts.some(part => Boolean(part.flags & primitives))) return true;
+  const family = parts.every(part => Boolean(part.flags & ts.TypeFlags.NumberLike)) ? ts.TypeFlags.NumberLike :
+    parts.every(part => Boolean(part.flags & ts.TypeFlags.BooleanLike)) ? ts.TypeFlags.BooleanLike :
+    parts.every(part => Boolean(part.flags & ts.TypeFlags.BigIntLike)) ? ts.TypeFlags.BigIntLike : 0;
+  const alternatives = fallback.isUnion() ? fallback.types : [fallback];
+  return family !== 0 && alternatives.every(part => Boolean(part.flags & (family | ts.TypeFlags.Never)));
 }
 
 function referenceRemoval(expression: ts.Expression, checker: ts.TypeChecker): ts.PropertyAccessExpression | null {
@@ -205,7 +187,7 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
           factory.createAssignment(at, ts.visitNode(index, visit, ts.isExpression) ?? index), ...relativeIndex, selection
         ])), factory.createUnionTypeNode([elementType, fallbackType]));
       }
-      if (lookup && resultType) {
+      if (lookup && resultType && mapFallback(lookup.valueType, fallbackValue)) {
         const map = fresh();
         const key = fresh();
         scope.push(nativeVariable(map, lookup.receiverType, null), nativeVariable(key, lookup.keyType, null));

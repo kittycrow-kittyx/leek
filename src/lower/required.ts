@@ -103,15 +103,15 @@ export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeC
         const array = f.createIdentifier(fresh(source, "array"));
         const index = f.createIdentifier(fresh(source, "index"));
         const present = f.createIdentifier(fresh(source, "present"));
-        scope.push(nativeVariable(array, f.createTypeReferenceNode(input.array), null), nativeVariable(index, f.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword), null), nativeVariable(present, f.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword), null));
-        if (!alias && required(fileNames.get(source) ?? null, "index alias scope").has("LeekRequiredIndex")) throw new Error("Leek WASM: reserved required index binding in " + source.fileName);
-        alias = true;
+        scope.push(nativeVariable(array, input.receiverType, null), nativeVariable(index, input.indexType, null), nativeVariable(present, f.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword), null));
+        if (input.array && !alias && required(fileNames.get(source) ?? null, "index alias scope").has("LeekRequiredIndex")) throw new Error("Leek WASM: reserved required index binding in " + source.fileName);
+        alias ||= input.array;
         const check = f.createParenthesizedExpression(f.createCommaListExpression([
-          f.createAssignment(array, ts.visitNode(input.read.expression, visit, ts.isExpression) ?? input.read.expression),
-          f.createAssignment(index, ts.visitNode(required(input.read.argumentExpression ?? null, "array index"), visit, ts.isExpression) ?? input.read.argumentExpression),
-          f.createAssignment(present, indexGuard(array, index))
+          f.createAssignment(array, ts.visitNode(input.receiver, visit, ts.isExpression) ?? input.receiver),
+          f.createAssignment(index, ts.visitNode(input.index, visit, ts.isExpression) ?? input.index),
+          f.createAssignment(present, input.array ? indexGuard(array, index) : f.createCallExpression(f.createPropertyAccessExpression(array, "has"), [], [index]))
         ]));
-        const value = f.createConditionalExpression(present, f.createToken(ts.SyntaxKind.QuestionToken), f.createNonNullExpression(f.createElementAccessExpression(array, indexCast(index, "LeekRequiredIndex"))), f.createToken(ts.SyntaxKind.ColonToken), f.createNumericLiteral(0));
+        const value = f.createConditionalExpression(present, f.createToken(ts.SyntaxKind.QuestionToken), f.createNonNullExpression(input.array ? f.createElementAccessExpression(array, indexCast(index, "LeekRequiredIndex")) : f.createCallExpression(f.createPropertyAccessExpression(array, "get"), [], [index])), f.createToken(ts.SyntaxKind.ColonToken), f.createNumericLiteral(0));
         const path = relative(dirname(source.fileName), helperSource.fileName).split(sep).join("/").replace(/\.ts$/, ".js");
         const specifier = path.startsWith(".") ? path : "./" + path;
         if (helperSource !== source) imports.set(plan.namespace, specifier);

@@ -9,6 +9,7 @@ import { lowerArrayLoop } from "./loops.ts";
 import { lowerNullable, referenceRead } from "./nullish.ts";
 import { lowerClosures } from "./closures.ts";
 import { lowerRequired } from "./required.ts";
+import { lowerPlatform } from "./platform.ts";
 
 const intrinsicFile = "__leek_wasm_intrinsics.ts";
 
@@ -145,6 +146,12 @@ export function prepareWasmSource(input: LoweredProject): string[] {
   if (parsed.errors.length) throw new Error(parsed.errors.map(error => ts.flattenDiagnosticMessageText(error.messageText, "\n")).join("\n"));
   const root = resolve(dirname(input.project), "source");
   let program = ts.createProgram(parsed.fileNames, parsed.options);
+  const platformChecker = program.getTypeChecker();
+  for (const file of stagedFiles(program, root)) {
+    const output = lowerPlatform(file, platformChecker);
+    if (output !== file.text) writeFileSync(file.fileName, output);
+  }
+  program = ts.createProgram(parsed.fileNames, parsed.options);
   const closureChecker = program.getTypeChecker();
   for (const file of stagedFiles(program, root)) {
     const output = lowerClosures(file, closureChecker);

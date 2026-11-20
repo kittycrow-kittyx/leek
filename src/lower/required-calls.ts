@@ -1,11 +1,15 @@
 import ts from "typescript";
+import { mapLookup } from "./map-lookup.ts";
 import { arrayType, unwrap } from "./integers.ts";
 import { parameterWritten } from "./captures.ts";
 
 export interface RequiredCall {
   call: ts.CallExpression;
-  read: ts.ElementAccessExpression;
-  array: string;
+  receiver: ts.Expression;
+  index: ts.Expression;
+  receiverType: ts.TypeNode;
+  indexType: ts.TypeNode;
+  array: boolean;
   helper: ts.FunctionDeclaration;
   signature: ts.Signature;
   typeParameter: ts.Symbol;
@@ -74,10 +78,15 @@ export function requiredCall(node: ts.Node, checker: ts.TypeChecker): RequiredCa
   const nullable = argument ? unwrap(argument) : null;
   if (!nullable || !ts.isBinaryExpression(nullable) || nullable.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken || unwrap(nullable.right).kind !== ts.SyntaxKind.NullKeyword) return null;
   const read = unwrap(nullable.left);
-  if (!ts.isElementAccessExpression(read) || (read.questionDotToken ?? null)) return null;
-  const index = read.argumentExpression ?? null;
-  const array = arrayType(checker.getTypeAtLocation(read.expression));
-  if (!index || !array || !(checker.getTypeAtLocation(index).flags & ts.TypeFlags.NumberLike)) return null;
+  const map = mapLookup(read, checker);
+  const element = ts.isElementAccessExpression(read) && !(read.questionDotToken ?? null) ? read : null;
+  const arrayName = element ? arrayType(checker.getTypeAtLocation(element.expression)) : null;
+  const receiver = arrayName && element ? element.expression : map ? map.receiver : null;
+  const index = arrayName && element ? element.argumentExpression ?? null : map ? map.key : null;
+  const receiverType = arrayName ? ts.factory.createTypeReferenceNode(arrayName) : map ? map.receiverType : null;
+  const indexType = arrayName ? ts.factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword) : map ? map.keyType : null;
+  const valid = index ? checker.getTypeAtLocation(index).flags & (arrayName ? ts.TypeFlags.NumberLike : ts.TypeFlags.StringLike) : 0;
+  if (!receiver || !index || !receiverType || !indexType || !valid || map && (!(map.valueType.flags & ts.TypeFlags.NumberLike) || map.keyType.kind !== ts.SyntaxKind.StringKeyword)) return null;
   const signature = checker.getResolvedSignature(node) ?? null;
   const helper = signature ? signature.getDeclaration() ?? null : null;
   if (!signature || !helper || !ts.isFunctionDeclaration(helper) || !ts.isSourceFile(helper.parent) || !(helper.name ?? null) || !(helper.body ?? null) || (helper.typeParameters ?? []).length !== 1 || helper.parameters.length !== node.arguments.length) return null;
@@ -96,5 +105,5 @@ export function requiredCall(node: ts.Node, checker: ts.TypeChecker): RequiredCa
   if (others.some(type => !(type.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.StringLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.BigIntLike)))) return null;
   const parameter = (helper.typeParameters ?? [])[0] ?? null;
   const typeParameter = parameter ? checker.getSymbolAtLocation(parameter.name) ?? null : null;
-  return typeParameter && parameterSafe(helper, checker) ? { call: node, read, array, helper, signature, typeParameter } : null;
+  return typeParameter && parameterSafe(helper, checker) ? { call: node, receiver, index, receiverType, indexType, array: arrayName !== null, helper, signature, typeParameter } : null;
 }

@@ -80,3 +80,16 @@ export function run(index: number): number { return checked(new Uint8Array([0, 4
 console.log(run(2));`;
   assert.equal(transform(input, helper).text, input);
 });
+
+test("map consumers distinguish missing entries from zero, signed zero and NaN", () => {
+  const helper = `export const events: string[] = [];
+export function checked<T>(value: T | null, label: string): T { events.push("helper:" + label); if (value === null) throw new Error("missing"); return value; }`;
+  const input = `import { checked, events } from "./helper.js";
+const values = new Map<string, number>([["zero", 0], ["negative", -0], ["nan", NaN]]);
+function receiver(): Map<string, number> { events.push("map"); return values; }
+function key(value: string): string { events.push("key"); return value; }
+function label(): string { events.push("label"); return "lookup"; }
+function run(name: string): string { try { const result = checked(receiver().get(key(name)) ?? null, label()); return Object.is(result, -0) ? "-0" : String(result); } catch (error) { return error instanceof Error ? error.message : "other"; } }
+console.log(JSON.stringify([["zero", "negative", "nan", "missing"].map(run), events]));`;
+  assert.match(transform(input, helper).text, /\.has\(/);
+});
