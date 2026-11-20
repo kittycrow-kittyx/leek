@@ -205,3 +205,7 @@ export function bigintLoop(): number {
 export function indexedCodePoint(index: number): number {
   return "A😀\ud800Z".codePointAt(index) ?? -7;
 }
+
+export function requiredCodePoint(index: number): number {
+  return requiredOr("\0😀\ud800Z".codePointAt(index) ?? null, -7);
+}

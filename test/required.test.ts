@@ -113,3 +113,16 @@ console.log(JSON.stringify([[-1,-0,0,0.5,1,2,3,4,NaN,Infinity].map(run), ["zero"
   assert.doesNotMatch(output.text, /checked\(receiver\(\)\[|checked\(map.get/);
   assert.match(output.text, /0n/);
 });
+
+
+test("checked code points distinguish NUL from absence after index conversion", () => {
+  const helper = `export const events: string[] = [];
+export function checked<T>(value: T | null, label: string): T { events.push(label); if (value === null) throw new Error(label); return value; }`;
+  const input = `import { checked, events } from "./helper.js";
+function source(): string { events.push("source"); return "\\0😀\\ud800Z"; }
+function index(value: number): number { events.push("index"); return value; }
+function label(): string { events.push("label"); return "missing"; }
+function run(value: number): string { try { return String(checked(source().codePointAt(index(value)) ?? null, label())); } catch(error) { return error instanceof Error ? error.message : "unexpected"; } }
+console.log(JSON.stringify([[-1,-0.5,-0,0,0.5,1,1.5,2,3,4,5,NaN,Infinity,-Infinity].map(run), events]));`;
+  assert.doesNotMatch(transform(input, helper).text, /checked\(source\(\).codePointAt/);
+});

@@ -5,7 +5,7 @@ import { nativeFunction, nativeParameter, nativeVariable } from "../../baguette/
 import { required } from "../../baguette/src/required.ts";
 import { functionBody } from "./function-body.ts";
 import { identifiers } from "./names.ts";
-import { indexCast, indexGuard } from "./index-access.ts";
+import { indexCast, indexGuard, integerIndex } from "./index-access.ts";
 import { nullTest, requiredCall, type RequiredCall } from "./required-calls.ts";
 
 export const requiredAliases = { LeekRequiredIndex: "i32" } as const;
@@ -104,14 +104,15 @@ export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeC
         const index = f.createIdentifier(fresh(source, "index"));
         const present = f.createIdentifier(fresh(source, "present"));
         scope.push(nativeVariable(array, input.receiverType, null), nativeVariable(index, input.indexType, null), nativeVariable(present, f.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword), null));
-        if (input.array && !alias && required(fileNames.get(source) ?? null, "index alias scope").has("LeekRequiredIndex")) throw new Error("Leek WASM: reserved required index binding in " + source.fileName);
-        alias ||= input.array;
+        if (input.kind !== "map" && !alias && required(fileNames.get(source) ?? null, "index alias scope").has("LeekRequiredIndex")) throw new Error("Leek WASM: reserved required index binding in " + source.fileName);
+        alias ||= input.kind !== "map";
         const check = f.createParenthesizedExpression(f.createCommaListExpression([
           f.createAssignment(array, ts.visitNode(input.receiver, visit, ts.isExpression) ?? input.receiver),
           f.createAssignment(index, ts.visitNode(input.index, visit, ts.isExpression) ?? input.index),
-          f.createAssignment(present, input.array ? indexGuard(array, index) : f.createCallExpression(f.createPropertyAccessExpression(array, "has"), [], [index]))
+          ...(input.kind === "point" ? [f.createAssignment(index, integerIndex(index))] : []),
+          f.createAssignment(present, input.kind !== "map" ? indexGuard(array, index) : f.createCallExpression(f.createPropertyAccessExpression(array, "has"), [], [index]))
         ]));
-        const value = f.createConditionalExpression(present, f.createToken(ts.SyntaxKind.QuestionToken), f.createNonNullExpression(input.array ? f.createElementAccessExpression(array, indexCast(index, "LeekRequiredIndex")) : f.createCallExpression(f.createPropertyAccessExpression(array, "get"), [], [index])), f.createToken(ts.SyntaxKind.ColonToken), input.bigint ? f.createBigIntLiteral("0n") : f.createNumericLiteral(0));
+        const value = f.createConditionalExpression(present, f.createToken(ts.SyntaxKind.QuestionToken), f.createNonNullExpression(input.kind === "point" ? f.createCallExpression(f.createPropertyAccessExpression(array, "codePointAt"), [], [indexCast(index, "LeekRequiredIndex")]) : input.kind === "array" ? f.createElementAccessExpression(array, indexCast(index, "LeekRequiredIndex")) : f.createCallExpression(f.createPropertyAccessExpression(array, "get"), [], [index])), f.createToken(ts.SyntaxKind.ColonToken), input.bigint ? f.createBigIntLiteral("0n") : f.createNumericLiteral(0));
         const path = relative(dirname(source.fileName), helperSource.fileName).split(sep).join("/").replace(/\.ts$/, ".js");
         const specifier = path.startsWith(".") ? path : "./" + path;
         if (helperSource !== source) imports.set(plan.namespace, specifier);

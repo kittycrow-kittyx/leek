@@ -139,58 +139,58 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
   } finally { result.dispose(); }
 }
 
-/** Apply the WASM extension to the staged graph before Baguette's mandatory Bake stage. */
-export function prepareWasmSource(input: LoweredProject): string[] {
+interface StagedGraph { files: string[]; options: ts.CompilerOptions; root: string }
+
+function stagedGraph(input: LoweredProject): StagedGraph {
   const config = ts.readJsonConfigFile(input.project, ts.sys.readFile);
   const parsed = ts.parseJsonSourceFileConfigFileContent(config, ts.sys, dirname(input.project), {}, input.project);
   if (parsed.errors.length) throw new Error(parsed.errors.map(error => ts.flattenDiagnosticMessageText(error.messageText, "\n")).join("\n"));
-  const root = resolve(dirname(input.project), "source");
-  let program = ts.createProgram(parsed.fileNames, parsed.options);
-  const platformChecker = program.getTypeChecker();
-  for (const file of stagedFiles(program, root)) {
-    const output = lowerPlatform(file, platformChecker);
+  return { files: parsed.fileNames, options: parsed.options, root: resolve(dirname(input.project), "source") };
+}
+
+/** Each phase resolves the previous phase's written source and validates every path before rewriting a file. */
+function rewriteGraph(graph: StagedGraph, lower: (file: ts.SourceFile, checker: ts.TypeChecker) => string, exclude = ""): void {
+  const program = ts.createProgram(graph.files, graph.options);
+  const checker = program.getTypeChecker();
+  for (const file of stagedFiles(program, graph.root).filter(file => file.fileName !== exclude)) {
+    const output = lower(file, checker);
     if (output !== file.text) writeFileSync(file.fileName, output);
   }
-  program = ts.createProgram(parsed.fileNames, parsed.options);
-  const closureChecker = program.getTypeChecker();
-  for (const file of stagedFiles(program, root)) {
-    const output = lowerClosures(file, closureChecker);
-    if (output !== file.text) writeFileSync(file.fileName, output);
-  }
-  program = ts.createProgram(parsed.fileNames, parsed.options);
-  const originalChecker = program.getTypeChecker();
-  const intrinsic = resolve(root, intrinsicFile);
+}
+
+function intrinsicPath(file: ts.SourceFile, intrinsic: string): string {
+  const path = relative(dirname(file.fileName), intrinsic).split(sep).join("/").replace(/\.ts$/, ".js");
+  return path.startsWith(".") ? path : "./" + path;
+}
+
+/** Apply the WASM extension to the staged graph before Baguette's mandatory Bake stage. */
+export function prepareWasmSource(input: LoweredProject): string[] {
+  const graph = stagedGraph(input);
+  const intrinsic = resolve(graph.root, intrinsicFile);
   const references = new Set<string>();
-  for (const file of stagedFiles(program, root)) {
-    const modulePath = relative(dirname(file.fileName), intrinsic).split(sep).join("/").replace(/\.ts$/, ".js");
-    const output = lowerNullable(file, originalChecker, modulePath.startsWith(".") ? modulePath : "./" + modulePath);
+  rewriteGraph(graph, lowerPlatform);
+  rewriteGraph(graph, lowerClosures);
+  rewriteGraph(graph, (file, checker) => {
+    const output = lowerNullable(file, checker, intrinsicPath(file, intrinsic));
     if (output.usesReferenceRead) references.add(referenceRead);
-    if (output.text !== file.text) writeFileSync(file.fileName, output.text);
-  }
+    return output.text;
+  });
   const referenceModuleWritten = references.size > 0;
   if (referenceModuleWritten) writeFileSync(intrinsic, [...references].join(""), { flag: "wx" });
-  program = ts.createProgram(parsed.fileNames, parsed.options);
-  const nullableChecker = program.getTypeChecker();
-  for (const file of stagedFiles(program, root).filter(file => file.fileName !== intrinsic)) {
-    const output = lowerNullable(file, nullableChecker);
-    if (output.text !== file.text) writeFileSync(file.fileName, output.text);
-  }
-  program = ts.createProgram(parsed.fileNames, parsed.options);
-  const requiredChecker = program.getTypeChecker();
-  for (const [file, text] of lowerRequired(stagedFiles(program, root).filter(file => file.fileName !== intrinsic), requiredChecker)) {
+  rewriteGraph(graph, (file, checker) => lowerNullable(file, checker).text, intrinsic);
+  const program = ts.createProgram(graph.files, graph.options);
+  const checker = program.getTypeChecker();
+  for (const [file, text] of lowerRequired(stagedFiles(program, graph.root).filter(file => file.fileName !== intrinsic), checker)) {
     if (text !== readFileSync(file, "utf8")) writeFileSync(file, text);
   }
-  program = ts.createProgram(parsed.fileNames, parsed.options);
-  const checker = program.getTypeChecker();
-  for (const file of stagedFiles(program, root).filter(file => file.fileName !== intrinsic)) {
-    const modulePath = relative(dirname(file.fileName), intrinsic).split(sep).join("/").replace(/\.ts$/, ".js");
-    const output = lowerWasm(file, checker, modulePath.startsWith(".") ? modulePath : "./" + modulePath);
+  rewriteGraph(graph, (file, checker) => {
+    const output = lowerWasm(file, checker, intrinsicPath(file, intrinsic));
     if (output.usesMultiply) references.add(multiplyReference);
     if (output.usesPredicates) references.add(floatReference);
     if (output.usesCoercion) references.add(integerReference);
     if (output.usesUnchecked) references.add(uncheckedReference);
-    if (output.text !== file.text) writeFileSync(file.fileName, output.text);
-  }
+    return output.text;
+  }, intrinsic);
   if (!references.size) return [];
   writeFileSync(intrinsic, [...references].join(""), { flag: referenceModuleWritten ? "w" : "wx" });
   return [intrinsic];

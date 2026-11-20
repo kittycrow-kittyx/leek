@@ -9,3 +9,5 @@ String-keyed Number and BigInt Maps use the existing Map has operation for prese
 Generated namespaces keep specialisations internal to the numeric WASM ABI while making them available to other staged modules. `requiredAliases` maps `LeekRequiredIndex` to i32 after validation. Canonical source files are read to stage the programme and remain unchanged.
 
 Namespaces initialise before the original module statements. New imports follow existing imports to retain dependency evaluation order. Cyclic helper modules retain their original calls.
+
+String code-point consumers reuse this presence protocol after `integerIndex` conversion and a bounds check. A present NUL code point is zero; the missing path is selected only by the separate presence flag.

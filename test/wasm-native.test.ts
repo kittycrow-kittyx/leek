@@ -44,6 +44,7 @@ function checkNumbers(exports: WebAssembly.Exports): void {
   assert.equal(call(exports, "bigintLoop"), reference.bigintLoop());
   for (const index of [-1, -0.5, -0, 0, 0.5, 1, 1.9, 2, 3, 4, 5, NaN, Infinity, -Infinity, 4294967296]) {
     assert.equal(call(exports, "indexedCodePoint", index), reference.indexedCodePoint(index));
+    assert.equal(call(exports, "requiredCodePoint", index), reference.requiredCodePoint(index));
     assert.equal(call(exports, "indexedBigInt", index), reference.indexedBigInt(index));
     for (const variant of [0, 1, 2, 3]) assert.equal(call(exports, "requiredBigInt", index, variant), reference.requiredBigInt(index, variant));
   }

@@ -4,7 +4,7 @@ import { lowerSourceFile } from "../../baguette/bake/src/lower.ts";
 import { createBakeCoreEngine } from "../../baguette/bake/src/core-engine.ts";
 import { arrayType, librarySymbol, unwrap } from "./integers.ts";
 import { identifiers } from "./names.ts";
-import { indexGuard, indexCast } from "./index-access.ts";
+import { indexGuard, indexCast, integerIndex } from "./index-access.ts";
 import { mapLookup } from "./map-lookup.ts";
 import { functionBody } from "./function-body.ts";
 
@@ -164,7 +164,7 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
       const fallbackParts = fallbackValue.isUnion() ? fallbackValue.types : [fallbackValue];
       const nativeFamily = typed && typed.startsWith("Big") ? ts.TypeFlags.BigIntLike : ts.TypeFlags.NumberLike;
       const nativeNumber = fallbackParts.every(part => Boolean(part.flags & (nativeFamily | ts.TypeFlags.Never)));
-      if (kind && (!point || kind === "string") && (kind !== "typed" || nativeNumber) && numericIndex && numericIndex.flags & ts.TypeFlags.NumberLike && receiverType && elementType && fallbackType && receiverExpression && index) {
+      if (kind && (!point || kind === "string" && nativeNumber) && (kind !== "typed" || nativeNumber) && numericIndex && numericIndex.flags & ts.TypeFlags.NumberLike && receiverType && elementType && fallbackType && receiverExpression && index) {
         const receiver = fresh();
         const at = fresh();
         scope.push(nativeVariable(receiver, receiverType, null), nativeVariable(at, factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword), null));
@@ -180,8 +180,7 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
           factory.createConditionalExpression(valid, factory.createToken(ts.SyntaxKind.QuestionToken), value, factory.createToken(ts.SyntaxKind.ColonToken), fallback);
         changed = true;
         const relativeIndex = call ? [
-          factory.createAssignment(at, factory.createConditionalExpression(factory.createBinaryExpression(at, ts.SyntaxKind.ExclamationEqualsEqualsToken, at), factory.createToken(ts.SyntaxKind.QuestionToken), factory.createNumericLiteral(0), factory.createToken(ts.SyntaxKind.ColonToken),
-            factory.createBinaryExpression(at, ts.SyntaxKind.MinusToken, factory.createBinaryExpression(at, ts.SyntaxKind.PercentToken, factory.createNumericLiteral(1))))),
+          factory.createAssignment(at, integerIndex(at)),
           ...(relative ? [factory.createAssignment(at, factory.createConditionalExpression(factory.createBinaryExpression(at, ts.SyntaxKind.LessThanToken, factory.createNumericLiteral(0)), factory.createToken(ts.SyntaxKind.QuestionToken),
             factory.createBinaryExpression(at, ts.SyntaxKind.PlusToken, factory.createPropertyAccessExpression(receiver, "length")), factory.createToken(ts.SyntaxKind.ColonToken), at))] : [])
         ] : [];
