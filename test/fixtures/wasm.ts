@@ -200,3 +200,8 @@ export function bigintLoop(): number {
   for (const value of values) result ^= value;
   return result === -1n ? 1 : 0;
 }
+
+
+export function indexedCodePoint(index: number): number {
+  return "A😀\ud800Z".codePointAt(index) ?? -7;
+}

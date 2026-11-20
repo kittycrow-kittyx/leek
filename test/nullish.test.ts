@@ -189,3 +189,14 @@ function run(index: number): string[] { return [String(signed[index] ?? fallback
 console.log(JSON.stringify([[-5,-1,-0,0,0.5,1,2,3,4,NaN,Infinity,-Infinity].map(run), events]));`;
   assert.equal(check(source), check(source, false));
 });
+
+
+test("code-point defaults preserve UTF-16 indexing, integer conversion and lazy fallbacks", () => {
+  const source = `const events: string[] = [];
+function receiver(): string { events.push("receiver"); return "A😀\\ud800Z"; }
+function key(index: number): number { events.push("key"); return index; }
+function fallback(): number { events.push("fallback"); return 42; }
+function run(index: number): number { return receiver().codePointAt(key(index)) ?? fallback(); }
+console.log(JSON.stringify([[-1,-0.5,-0,0,0.5,1,1.9,2,3,4,5,NaN,Infinity,-Infinity,4294967296].map(run), events]));`;
+  assert.equal(check(source), check(source, false));
+});

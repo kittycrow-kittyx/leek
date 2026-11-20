@@ -26,3 +26,5 @@ Standard `at(index)` defaults share indexed lowering. The index is truncated tow
 Bake handles selection for nullable identifiers. Other undefined-sensitive values, unresolved generics, primitive nullable representations and expressions containing suspension await further Leek transformations. Tests compare observable evaluation order with original TypeScript and execute the compiled nullable path in WebAssembly.
 
 BigInt64Array and BigUint64Array defaults use the same bounds and integrality guard as Number typed arrays, with a BigInt fallback. Reads retain 64-bit storage; missing elements never become a stored zero value.
+
+Standard string `codePointAt(index)` defaults reuse the same captured index and bounds checks. The index truncates towards zero without negative wrapping, and a validated native code-point read remains distinct from a missing result. Tests include surrogate pairs, lone surrogates, fractional indices, NaN and infinities.

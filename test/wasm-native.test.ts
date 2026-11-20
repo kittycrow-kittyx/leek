@@ -38,10 +38,12 @@ function numericCases(): number[] {
   return values;
 }
 
+/** Compare native numeric operations and presence guards against source semantics at coercion and storage boundaries. */
 function checkNumbers(exports: WebAssembly.Exports): void {
   assert.equal(call(exports, "nativeEnvironment"), 1, "native WASM uses the source fallback for absent browser capabilities");
   assert.equal(call(exports, "bigintLoop"), reference.bigintLoop());
-  for (const index of [-1, -0, 0, 0.5, 1, NaN, Infinity, 4294967296]) {
+  for (const index of [-1, -0.5, -0, 0, 0.5, 1, 1.9, 2, 3, 4, 5, NaN, Infinity, -Infinity, 4294967296]) {
+    assert.equal(call(exports, "indexedCodePoint", index), reference.indexedCodePoint(index));
     assert.equal(call(exports, "indexedBigInt", index), reference.indexedBigInt(index));
     for (const variant of [0, 1, 2, 3]) assert.equal(call(exports, "requiredBigInt", index, variant), reference.requiredBigInt(index, variant));
   }
