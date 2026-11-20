@@ -7,3 +7,5 @@ The analysis checks every reference to a local function before lifting it. Funct
 Calls must retain the owning method's receiver. References inside a nested ordinary function or class retain their original form. Generic arrows that shadow a class type parameter also retain their source form.
 
 Closure lifting accepts void results and native value types. Captures, parameters or results containing undefined or nullable primitives retain their closures pending optional storage.
+
+`parameterWritten(root, symbol, checker)` scans assignment targets, including destructuring, for writes to a binding. Optional-number consumer analysis also uses this check for helper parameters and function bindings.

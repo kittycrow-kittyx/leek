@@ -88,7 +88,7 @@ function directCalls(source: ts.SourceFile, arrow: ts.ArrowFunction, variable: t
   return eligible ? calls : null;
 }
 
-function parameterWritten(owner: ts.MethodDeclaration, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+export function parameterWritten(owner: ts.Node, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
   let written = false;
   const scan = (node: ts.Node): void => {
     const assignment = ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment;

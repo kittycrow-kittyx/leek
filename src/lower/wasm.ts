@@ -8,6 +8,7 @@ import { arrayType, integerOperation, integerStorage, integerValue, nativeWidths
 import { lowerArrayLoop } from "./loops.ts";
 import { lowerNullable, referenceRead } from "./nullish.ts";
 import { lowerClosures } from "./closures.ts";
+import { lowerRequired } from "./required.ts";
 
 const intrinsicFile = "__leek_wasm_intrinsics.ts";
 
@@ -166,6 +167,11 @@ export function prepareWasmSource(input: LoweredProject): string[] {
   for (const file of stagedFiles(program, root).filter(file => file.fileName !== intrinsic)) {
     const output = lowerNullable(file, nullableChecker);
     if (output.text !== file.text) writeFileSync(file.fileName, output.text);
+  }
+  program = ts.createProgram(parsed.fileNames, parsed.options);
+  const requiredChecker = program.getTypeChecker();
+  for (const [file, text] of lowerRequired(stagedFiles(program, root).filter(file => file.fileName !== intrinsic), requiredChecker)) {
+    if (text !== readFileSync(file, "utf8")) writeFileSync(file, text);
   }
   program = ts.createProgram(parsed.fileNames, parsed.options);
   const checker = program.getTypeChecker();

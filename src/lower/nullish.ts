@@ -4,6 +4,8 @@ import { lowerSourceFile } from "../../baguette/bake/src/lower.ts";
 import { createBakeCoreEngine } from "../../baguette/bake/src/core-engine.ts";
 import { arrayType, librarySymbol, unwrap } from "./integers.ts";
 import { identifiers } from "./names.ts";
+import { indexGuard, indexCast } from "./index-access.ts";
+import { functionBody } from "./function-body.ts";
 
 interface MapLookup {
   receiver: ts.Expression;
@@ -85,12 +87,6 @@ function suspended(node: ts.Node): boolean {
   return ts.forEachChild(node, suspended) ?? false;
 }
 
-function bodyOf(node: ts.Node): ts.ConciseBody | null {
-  return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) ||
-    ts.isMethodDeclaration(node) || ts.isConstructorDeclaration(node) || ts.isGetAccessorDeclaration(node) ||
-    ts.isSetAccessorDeclaration(node) ? node.body ?? null : null;
-}
-
 /** Give Bake a repeatable nullable reference while retaining evaluation at the original expression. */
 function bakeNullable(source: ts.SourceFile, checker: ts.TypeChecker, cache: ts.Identifier, type: ts.Type, fallback: ts.Expression): ts.Expression {
   const factory = ts.factory;
@@ -128,7 +124,7 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
       return factory.createIdentifier(name);
     };
     const visit: ts.Visitor<ts.Node, ts.Node> = node => {
-      const body = bodyOf(node);
+      const body = functionBody(node);
       if (body) {
         const declarations: ts.VariableDeclaration[] = [];
         scopes.push(declarations);
@@ -187,12 +183,9 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
         const receiver = fresh();
         const at = fresh();
         scope.push(nativeVariable(receiver, receiverType, null), nativeVariable(at, factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword), null));
-        const integral = factory.createBinaryExpression(factory.createBinaryExpression(at, ts.SyntaxKind.PercentToken, factory.createNumericLiteral(1)), ts.SyntaxKind.EqualsEqualsEqualsToken, factory.createNumericLiteral(0));
-        const bounds = factory.createBinaryExpression(factory.createBinaryExpression(at, ts.SyntaxKind.GreaterThanEqualsToken, factory.createNumericLiteral(0)), ts.SyntaxKind.AmpersandAmpersandToken,
-          factory.createBinaryExpression(at, ts.SyntaxKind.LessThanToken, factory.createPropertyAccessExpression(receiver, "length")));
-        const valid = factory.createBinaryExpression(bounds, ts.SyntaxKind.AmpersandAmpersandToken, integral);
+        const valid = indexGuard(receiver, at);
         used.indexName ??= reserve("LeekArrayIndex");
-        const nativeIndex = factory.createParenthesizedExpression(factory.createAsExpression(at, factory.createTypeReferenceNode(used.indexName)));
+        const nativeIndex = indexCast(at, used.indexName.text);
         used.readName = kind === "reference" ? used.readName ?? reserve("LeekReferenceAt") : used.readName;
         const value = kind === "string" ? factory.createCallExpression(factory.createPropertyAccessExpression(receiver, "charAt"), [], [nativeIndex]) :
           kind === "reference" && used.readName ? factory.createCallExpression(used.readName, [], [receiver, nativeIndex]) : factory.createNonNullExpression(factory.createElementAccessExpression(receiver, nativeIndex));

@@ -152,3 +152,14 @@ export function relativeReference(index: number): number {
 export function relativeString(index: number): number {
   return ("A😀Z".at(index) ?? "?").charCodeAt(0);
 }
+
+function requiredOr<T>(value: T | null, fallback: T): T {
+  if (value === null) return fallback;
+  return value;
+}
+
+export function requiredNumber(index: number, value: number): number {
+  const values: Float64Array = new Float64Array(1);
+  values[0] = value;
+  return requiredOr(values[index] ?? null, -7);
+}
