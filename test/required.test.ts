@@ -126,3 +126,38 @@ function run(value: number): string { try { return String(checked(source().codeP
 console.log(JSON.stringify([[-1,-0.5,-0,0,0.5,1,1.5,2,3,4,5,NaN,Infinity,-Infinity].map(run), events]));`;
   assert.doesNotMatch(transform(input, helper).text, /checked\(source\(\).codePointAt/);
 });
+
+test("optional primitive equality snapshots reads before later operands and distinguishes null from zero", () => {
+  const input = `export {};
+const events: string[] = [];
+const values = new Float64Array([0,-0,NaN,7]);
+const map = new Map<string,number>([["zero",0],["nan",NaN]]);
+function receiver():Float64Array { events.push("receiver"); return values; }
+function index(value:number):number { events.push("index"); return value; }
+function other():number { events.push("other"); values[0]=9; return 0; }
+function run(at:number):boolean[] {
+  values[0]=0;
+  const result = [(receiver()[index(at)] ?? null) === other()];
+  values[0]=0;
+  result.push(other() === (receiver()[index(at)] ?? null));
+  for(const value of [0,-0,NaN,7]) result.push((values[at] ?? null) === value, value !== (values[at] ?? null));
+  result.push((values[at] ?? null) === null, null !== (values[at] ?? null));
+  return result;
+}
+function lookup(key:string,value:number):boolean[] { return [(map.get(key) ?? null) === value, value !== (map.get(key) ?? null), (map.get(key) ?? null) === null]; }
+function wide(at:number):boolean[] { const items=new BigInt64Array([0n,-1n]); return [(items[at] ?? null) === 0n, -1n !== (items[at] ?? null), (items[at] ?? null) === null]; }
+function point(at:number):boolean[] { const text="\\0😀"; return [(text.codePointAt(at) ?? null) === 0, 128512 !== (text.codePointAt(at) ?? null), (text.codePointAt(at) ?? null) !== null]; }
+console.log(JSON.stringify([[-1,-0.5,-0,0,0.5,1,2,3,4,NaN,Infinity,4294967296].map(run),["zero","nan","missing"].map(key=>lookup(key,0)),[-1,0,1,2].map(wide),[-1,0,0.5,1,2,3,NaN,Infinity].map(point),events]));`;
+  const output = transform(input, "export {};");
+  assert.doesNotMatch(output.text, /\?\? null/);
+  assert.match(output.text, /satisfies boolean/);
+});
+
+test("optional primitive comparisons retain coercing equality and unsupported storage domains", () => {
+  const input = `export {};
+function run(values:number[], key:number):boolean { return (values[key] ?? null) === 0; }
+function loose(values:Uint8Array,key:number):boolean { return (values[key] ?? null) == 0; }
+function missing(values:Map<number,number>,key:number):boolean { return (values.get(key) ?? null) === 0; }
+console.log(run([],0),loose(new Uint8Array([0]),0),missing(new Map(),0));`;
+  assert.equal(transform(input, "export {};").text, input);
+});

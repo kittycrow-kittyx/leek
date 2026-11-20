@@ -1,16 +1,10 @@
 import ts from "typescript";
-import { mapLookup } from "./map-lookup.ts";
-import { arrayType, librarySymbol, unwrap } from "./integers.ts";
+import { unwrap } from "./integers.ts";
+import { primitiveRead, type PrimitiveRead } from "./primitive-read.ts";
 import { parameterWritten } from "./captures.ts";
 
-export interface RequiredCall {
+export interface RequiredCall extends PrimitiveRead {
   call: ts.CallExpression;
-  receiver: ts.Expression;
-  index: ts.Expression;
-  receiverType: ts.TypeNode;
-  indexType: ts.TypeNode;
-  kind: "array" | "map" | "point";
-  bigint: boolean;
   helper: ts.FunctionDeclaration;
   signature: ts.Signature;
   typeParameter: ts.Symbol;
@@ -78,18 +72,8 @@ export function requiredCall(node: ts.Node, checker: ts.TypeChecker): RequiredCa
   const argument = node.arguments[0] ?? null;
   const nullable = argument ? unwrap(argument) : null;
   if (!nullable || !ts.isBinaryExpression(nullable) || nullable.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken || unwrap(nullable.right).kind !== ts.SyntaxKind.NullKeyword) return null;
-  const read = unwrap(nullable.left);
-  const map = mapLookup(read, checker);
-  const element = ts.isElementAccessExpression(read) && !(read.questionDotToken ?? null) ? read : null;
-  const member = ts.isCallExpression(read) && read.arguments.length === 1 && !(read.questionDotToken ?? null) && ts.isPropertyAccessExpression(read.expression) ? read.expression : null;
-  const point = member && !(member.questionDotToken ?? null) && member.name.text === "codePointAt" && checker.getTypeAtLocation(member.expression).flags & ts.TypeFlags.StringLike && librarySymbol(checker.getSymbolAtLocation(member.name) ?? null) && ts.isCallExpression(read) ? read : null;
-  const arrayName = element ? arrayType(checker.getTypeAtLocation(element.expression)) : null;
-  const receiver = arrayName && element ? element.expression : point && member ? member.expression : map ? map.receiver : null;
-  const index = arrayName && element ? element.argumentExpression ?? null : point ? point.arguments[0] ?? null : map ? map.key : null;
-  const receiverType = arrayName ? ts.factory.createTypeReferenceNode(arrayName) : point ? ts.factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword) : map ? map.receiverType : null;
-  const indexType = arrayName || point ? ts.factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword) : map ? map.keyType : null;
-  const valid = index ? checker.getTypeAtLocation(index).flags & (arrayName || point ? ts.TypeFlags.NumberLike : ts.TypeFlags.StringLike) : 0;
-  if (!receiver || !index || !receiverType || !indexType || !valid || map && (!(map.valueType.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.BigIntLike)) || map.keyType.kind !== ts.SyntaxKind.StringKeyword)) return null;
+  const inputRead = primitiveRead(nullable.left, checker);
+  if (!inputRead) return null;
   const signature = checker.getResolvedSignature(node) ?? null;
   const helper = signature ? signature.getDeclaration() ?? null : null;
   if (!signature || !helper || !ts.isFunctionDeclaration(helper) || !ts.isSourceFile(helper.parent) || !(helper.name ?? null) || !(helper.body ?? null) || (helper.typeParameters ?? []).length !== 1 || helper.parameters.length !== node.arguments.length) return null;
@@ -103,11 +87,11 @@ export function requiredCall(node: ts.Node, checker: ts.TypeChecker): RequiredCa
   const input = first ? checker.getTypeOfSymbolAtLocation(first, node) : null;
   if (!input || !input.isUnion() || !input.types.some(type => Boolean(type.flags & ts.TypeFlags.Null))) return null;
   const primitive = checker.getNonNullableType(input);
-  const family = arrayName && arrayName.startsWith("Big") || map && map.valueType.flags & ts.TypeFlags.BigIntLike ? ts.TypeFlags.BigIntLike : ts.TypeFlags.NumberLike;
+  const family = inputRead.bigint ? ts.TypeFlags.BigIntLike : ts.TypeFlags.NumberLike;
   if (!(primitive.flags & family) || !(signature.getReturnType().flags & family)) return null;
   const others = signature.parameters.slice(1).map(parameter => checker.getTypeOfSymbolAtLocation(parameter, node));
   if (others.some(type => !(type.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.StringLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.BigIntLike)))) return null;
   const parameter = (helper.typeParameters ?? [])[0] ?? null;
   const typeParameter = parameter ? checker.getSymbolAtLocation(parameter.name) ?? null : null;
-  return typeParameter && parameterSafe(helper, checker) ? { call: node, receiver, index, receiverType, indexType, kind: point ? "point" : arrayName ? "array" : "map", bigint: family === ts.TypeFlags.BigIntLike, helper, signature, typeParameter } : null;
+  return typeParameter && parameterSafe(helper, checker) ? { ...inputRead, call: node, helper, signature, typeParameter } : null;
 }

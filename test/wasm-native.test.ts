@@ -47,11 +47,15 @@ function checkNumbers(exports: WebAssembly.Exports): void {
     assert.equal(call(exports, "indexedCodePoint", index), reference.indexedCodePoint(index));
     assert.equal(call(exports, "requiredCodePoint", index), reference.requiredCodePoint(index));
     assert.equal(call(exports, "indexedBigInt", index), reference.indexedBigInt(index));
+    assert.equal(call(exports, "optionalWideEquality", index), reference.optionalWideEquality(index));
+    assert.equal(call(exports, "optionalPointEquality", index), reference.optionalPointEquality(index));
+    for (const value of [0, -0, NaN, 7]) assert.equal(call(exports, "optionalEquality", index, value), reference.optionalEquality(index, value));
     for (const variant of [0, 1, 2, 3]) assert.equal(call(exports, "requiredBigInt", index, variant), reference.requiredBigInt(index, variant));
   }
   for (const present of [0, 1]) for (const selected of [0, 1]) {
     assert.equal(call(exports, "nullablePredicate", present, selected), reference.nullablePredicate(present, selected));
     assert.equal(call(exports, "predicateReceiver", present, selected), reference.predicateReceiver(present, selected));
+    for (const value of [0, -0, NaN, 7]) assert.equal(call(exports, "optionalMapEquality", present, value), reference.optionalMapEquality(present, value));
   }
   const caught = { localCaught: reference.localCaught, localReturn: reference.localReturn, localIgnored: reference.localIgnored, localNested: reference.localNested };
   for (const [name, operation] of Object.entries(caught)) for (const input of [-Infinity, -7, -0, 0, 1, 4, Infinity, NaN]) assert.equal(call(exports, name, input), operation(input));

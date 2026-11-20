@@ -292,3 +292,29 @@ export function localNested(input: number): number {
   } catch (error) { total += error instanceof Error ? error.message.length : 0; }
   return total;
 }
+
+export function optionalEquality(index: number, value: number): number {
+  const values = new Float64Array(4);
+  values[0] = 0; values[1] = -0; values[2] = NaN; values[3] = 7;
+  return ((values[index] ?? null) === value ? 1 : 0) + (value !== (values[index] ?? null) ? 2 : 0) +
+    ((values[index] ?? null) === null ? 4 : 0) + (null !== (values[index] ?? null) ? 8 : 0);
+}
+
+export function optionalWideEquality(index: number): number {
+  const values = new BigInt64Array(3);
+  values[0] = 0n; values[1] = -1n; values[2] = 9223372036854775807n;
+  return ((values[index] ?? null) === 0n ? 1 : 0) + (-1n !== (values[index] ?? null) ? 2 : 0) +
+    ((values[index] ?? null) === null ? 4 : 0);
+}
+
+export function optionalMapEquality(present: number, value: number): number {
+  const values = new Map<string, number>();
+  if (present !== 0) values.set("value", value);
+  return ((values.get("value") ?? null) === value ? 1 : 0) + ((values.get("value") ?? null) !== null ? 2 : 0);
+}
+
+export function optionalPointEquality(index: number): number {
+  const value = "\0😀";
+  return ((value.codePointAt(index) ?? null) === 0 ? 1 : 0) + ((value.codePointAt(index) ?? null) === 128512 ? 2 : 0) +
+    ((value.codePointAt(index) ?? null) === null ? 4 : 0);
+}

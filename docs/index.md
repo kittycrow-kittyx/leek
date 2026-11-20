@@ -16,6 +16,8 @@ Install the pinned dependencies and run `bun run build` before changing the lowe
 - [Map lookup facts](modules/lower/map-lookup.md)
 - [Function body scopes](modules/lower/function-body.md)
 - [Optional-primitive consumer analysis](modules/lower/required-calls.md)
+- [Optional primitive reads](modules/lower/primitive-read.md)
+- [Optional primitive comparisons](modules/lower/comparison.md)
 - [Immediate optional-primitive consumption](modules/lower/required.md)
 - [Local capture analysis](modules/lower/captures.md)
 - [Local function lowering](modules/lower/closures.md)

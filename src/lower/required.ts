@@ -5,7 +5,8 @@ import { nativeFunction, nativeParameter, nativeVariable } from "../../baguette/
 import { required } from "../../baguette/src/required.ts";
 import { functionBody } from "./function-body.ts";
 import { identifiers } from "./names.ts";
-import { indexCast, indexGuard, integerIndex } from "./index-access.ts";
+import { primitiveSnapshot, type PrimitiveRead } from "./primitive-read.ts";
+import { optionalComparison } from "./comparison.ts";
 import { nullTest, requiredCall, type RequiredCall } from "./required-calls.ts";
 
 export const requiredAliases = { LeekRequiredIndex: "i32" } as const;
@@ -56,7 +57,7 @@ function specialisedFunction(plan: Specialisation, checker: ts.TypeChecker): ts.
   } finally { result.dispose(); }
 }
 
-/** Keep typed-array optional primitives as a presence bit plus native value when a checked helper immediately consumes them. */
+/** Consume optional primitives with separate presence storage in checked helpers and strict comparisons. */
 export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeChecker): Map<string, string> {
   const f = ts.factory;
   const fileNames = new Map(files.map(file => [file, identifiers(file)]));
@@ -70,9 +71,9 @@ export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeC
     names.add(name); serials.set(file, serial);
     return name;
   };
-  const calls = new Map<ts.CallExpression, Specialisation>();
   const plans = new Map<ts.FunctionDeclaration, Map<string, Specialisation>>();
   const namespaces = new Map<ts.SourceFile, string>();
+  let changed = false;
   const outputs = new Map<ts.SourceFile, ts.SourceFile>();
   const headers = new Map<ts.SourceFile, string>();
   for (const source of files) {
@@ -91,6 +92,22 @@ export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeC
           return ts.visitEachChild(node, child => child === body ? block : child, context);
         }
         const scope = scopes[scopes.length - 1] ?? null;
+        const expression = (value: ts.Expression): ts.Expression => ts.visitNode(value, visit, ts.isExpression) ?? value;
+        const temporary = (type: ts.TypeNode): ts.Identifier => {
+          const name = f.createIdentifier(fresh(source, "value"));
+          if (!scope) throw new Error("Missing primitive read scope");
+          scope.push(nativeVariable(name, type, null));
+          return name;
+        };
+        const capture = (input: PrimitiveRead): ReturnType<typeof primitiveSnapshot> & { present: ts.Identifier } => {
+          const array = temporary(input.receiverType), index = temporary(input.indexType);
+          const present = temporary(f.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword));
+          if (input.kind !== "map" && !alias && required(fileNames.get(source) ?? null, "index alias scope").has("LeekRequiredIndex")) throw new Error("Leek WASM: reserved required index binding in " + source.fileName);
+          alias ||= input.kind !== "map";
+          return { ...primitiveSnapshot(input, array, index, present, "LeekRequiredIndex", expression), present };
+        };
+        const comparison = scope && ts.isBinaryExpression(node) && !suspended(node) ? optionalComparison(node, checker, capture, temporary, expression) : null;
+        if (comparison) { changed = true; return comparison; }
         const input = scope && ts.isCallExpression(node) && !suspended(node) ? requiredCall(node, checker) : null;
         if (!scope || !input || !fileNames.has(input.helper.getSourceFile())) return ts.visitEachChild(node, visit, context);
         const helperSource = input.helper.getSourceFile();
@@ -99,20 +116,11 @@ export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeC
         const namespace = namespaces.get(helperSource) ?? fresh(helperSource, "required");
         namespaces.set(helperSource, namespace);
         const plan = variants.get(key) ?? { input, namespace, name: fresh(helperSource, "value"), presence: fresh(helperSource, "present") };
-        variants.set(key, plan); plans.set(input.helper, variants); calls.set(input.call, plan);
-        const array = f.createIdentifier(fresh(source, "array"));
-        const index = f.createIdentifier(fresh(source, "index"));
-        const present = f.createIdentifier(fresh(source, "present"));
-        scope.push(nativeVariable(array, input.receiverType, null), nativeVariable(index, input.indexType, null), nativeVariable(present, f.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword), null));
-        if (input.kind !== "map" && !alias && required(fileNames.get(source) ?? null, "index alias scope").has("LeekRequiredIndex")) throw new Error("Leek WASM: reserved required index binding in " + source.fileName);
-        alias ||= input.kind !== "map";
-        const check = f.createParenthesizedExpression(f.createCommaListExpression([
-          f.createAssignment(array, ts.visitNode(input.receiver, visit, ts.isExpression) ?? input.receiver),
-          f.createAssignment(index, ts.visitNode(input.index, visit, ts.isExpression) ?? input.index),
-          ...(input.kind === "point" ? [f.createAssignment(index, integerIndex(index))] : []),
-          f.createAssignment(present, input.kind !== "map" ? indexGuard(array, index) : f.createCallExpression(f.createPropertyAccessExpression(array, "has"), [], [index]))
-        ]));
-        const value = f.createConditionalExpression(present, f.createToken(ts.SyntaxKind.QuestionToken), f.createNonNullExpression(input.kind === "point" ? f.createCallExpression(f.createPropertyAccessExpression(array, "codePointAt"), [], [indexCast(index, "LeekRequiredIndex")]) : input.kind === "array" ? f.createElementAccessExpression(array, indexCast(index, "LeekRequiredIndex")) : f.createCallExpression(f.createPropertyAccessExpression(array, "get"), [], [index])), f.createToken(ts.SyntaxKind.ColonToken), input.bigint ? f.createBigIntLiteral("0n") : f.createNumericLiteral(0));
+        variants.set(key, plan); plans.set(input.helper, variants);
+        const snapshot = capture(input);
+        const check = f.createParenthesizedExpression(f.createCommaListExpression(snapshot.effects));
+        const value = snapshot.value;
+        changed = true;
         const path = relative(dirname(source.fileName), helperSource.fileName).split(sep).join("/").replace(/\.ts$/, ".js");
         const specifier = path.startsWith(".") ? path : "./" + path;
         if (helperSource !== source) imports.set(plan.namespace, specifier);
@@ -136,5 +144,5 @@ export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeC
     outputs.set(source, f.updateSourceFile(output, [namespace, ...output.statements]));
   }
   const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
-  return new Map([...outputs].map(([source, output]) => [source.fileName, calls.size ? printer.printFile(output) + "\n" + (headers.get(source) ?? "") : source.text]));
+  return new Map([...outputs].map(([source, output]) => [source.fileName, changed ? printer.printFile(output) + "\n" + (headers.get(source) ?? "") : source.text]));
 }
