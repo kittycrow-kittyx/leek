@@ -7,6 +7,7 @@ import { numericCall } from "./numeric.ts";
 import { arrayType, integerOperation, integerStorage, integerValue, nativeWidths, signed, unsigned, unwrap } from "./integers.ts";
 import { lowerArrayLoop } from "./loops.ts";
 import { lowerNullable } from "./nullish.ts";
+import { lowerClosures } from "./closures.ts";
 
 const intrinsicFile = "__leek_wasm_intrinsics.ts";
 
@@ -141,6 +142,12 @@ export function prepareWasmSource(input: LoweredProject): string[] {
   if (parsed.errors.length) throw new Error(parsed.errors.map(error => ts.flattenDiagnosticMessageText(error.messageText, "\n")).join("\n"));
   const root = resolve(dirname(input.project), "source");
   let program = ts.createProgram(parsed.fileNames, parsed.options);
+  const closureChecker = program.getTypeChecker();
+  for (const file of stagedFiles(program, root)) {
+    const output = lowerClosures(file, closureChecker);
+    if (output !== file.text) writeFileSync(file.fileName, output);
+  }
+  program = ts.createProgram(parsed.fileNames, parsed.options);
   const originalChecker = program.getTypeChecker();
   for (const file of stagedFiles(program, root)) {
     const output = lowerNullable(file, originalChecker);

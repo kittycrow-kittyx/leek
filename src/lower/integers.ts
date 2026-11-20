@@ -10,7 +10,7 @@ const bitwise = new Set([
   ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken
 ]);
 
-function librarySymbol(symbol: ts.Symbol | null): boolean {
+export function librarySymbol(symbol: ts.Symbol | null): boolean {
   return symbol !== null && (symbol.declarations ?? []).some(declaration =>
     /(?:^|[\\/])lib\.[^\\/]+\.d\.ts$/.test(declaration.getSourceFile().fileName));
 }

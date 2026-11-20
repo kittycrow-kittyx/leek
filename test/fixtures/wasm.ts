@@ -51,3 +51,52 @@ export function nullableEffect(flag: number): number {
   const value = maybe(flag !== 0) ?? fallback();
   return nullableCalls * 10 + value.length;
 }
+
+let asyncValue = 0;
+let asyncReady = false;
+let asyncCompletion: Promise<void> | null = null;
+
+class ClosureCounter {
+  private base = 3;
+
+  async run(input: number): Promise<number> {
+    const factor = input + this.base;
+    let count = 0;
+    const one = async (depth: number): Promise<number> => {
+      count++;
+      if (depth > 0) return await one(depth - 1) + factor;
+      return this.base + count;
+    };
+    const first = await one(2);
+    count += 1;
+    return first + await one(0);
+  }
+}
+
+async function completeClosure(input: number): Promise<void> {
+  asyncValue = await new ClosureCounter().run(input);
+  asyncReady = true;
+}
+
+export function beginClosure(input: number): number {
+  asyncReady = false;
+  asyncCompletion = completeClosure(input);
+  return 0;
+}
+
+export function closureReady(): number { return asyncCompletion !== null && asyncReady ? 1 : 0; }
+export function closureValue(): number { return asyncValue; }
+
+export function mapDefault(present: number, value: number): number {
+  const map: Map<string, number> = new Map<string, number>();
+  if (present !== 0) map.set("key", value);
+  return map.get("key") ?? -7;
+}
+
+class MapValue { constructor(readonly value: number) {} }
+export function mapReferenceDefault(present: number, value: number): number {
+  const map: Map<string, MapValue> = new Map<string, MapValue>();
+  if (present !== 0) map.set("key", new MapValue(value));
+  const item = map.get("key") ?? null;
+  return item === null ? -7 : item.value;
+}

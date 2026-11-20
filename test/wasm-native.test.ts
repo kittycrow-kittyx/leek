@@ -47,8 +47,20 @@ function checkNumbers(exports: WebAssembly.Exports): void {
   }
   for (const value of values) assert.equal(call(exports, "predicates", value), reference.predicates(value));
   for (const value of values) assert.equal(call(exports, "canonicalBindings", value), reference.canonicalBindings(value));
+  for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "mapDefault", present, value), reference.mapDefault(present, value));
+  for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "mapReferenceDefault", present, value), reference.mapReferenceDefault(present, value));
   for (const value of [0, 1]) assert.equal(call(exports, "nullableEffect", value), reference.nullableEffect(value));
   for (const [name, expected] of [["signedRead", -1], ["widerWrite", 1], ["assignmentResult", 0]] as const) assert.equal(call(exports, name), expected);
+}
+
+async function checkClosures(exports: WebAssembly.Exports): Promise<void> {
+  for (const input of [-1, 0, 4, 7]) {
+    assert.equal(call(exports, "beginClosure", input), reference.beginClosure(input));
+    for (let step = 0; !reference.closureReady() && step < 100; step++) await Promise.resolve();
+    assert.equal(reference.closureReady(), 1);
+    assert.equal(call(exports, "closureReady"), 1);
+    assert.equal(call(exports, "closureValue"), reference.closureValue());
+  }
 }
 
 /** Byte setters and bulk views must address the same rooted array. Releasing
@@ -109,7 +121,7 @@ function checkInstructions(bytes: Uint8Array): void {
   } finally { module.dispose(); }
 }
 
-test("compiled WASM preserves numeric semantics, rooted buffers and native checksum instructions", { timeout: 120000 }, () => {
+test("compiled WASM preserves numeric semantics, native closures, rooted buffers and checksum instructions", { timeout: 120000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "leek-native-"));
   try {
     mkdirSync(join(root, "src"));
@@ -130,6 +142,7 @@ test("compiled WASM preserves numeric semantics, rooted buffers and native check
     assert.deepEqual(WebAssembly.Module.imports(module).map(item => item.module + "." + item.name).sort(), ["env.abort", "env.memory"]);
     const instance = new WebAssembly.Instance(module, { env: { memory, abort: () => { throw new Error("Native abort"); } } });
     checkNumbers(instance.exports);
+    await checkClosures(instance.exports);
     checkBytes(instance.exports, memory);
     checkInstructions(bytes);
   } finally { rmSync(root, { recursive: true, force: true }); }
