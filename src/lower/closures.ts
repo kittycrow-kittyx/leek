@@ -10,11 +10,7 @@ interface Cell {
   name: string;
 }
 
-/** Expose captured state to Baguette's existing coroutine pass instead of emitting a closure runtime. */
-export function lowerClosures(source: ts.SourceFile, checker: ts.TypeChecker): string {
-  const units = closureUnits(source, checker);
-  if (!units.length) return source.text;
-  const factory = ts.factory;
+function closureBindings(source: ts.SourceFile, units: ClosureUnit[]) {
   const prefix = "__leek_" + createHash("sha256").update(source.text).digest("hex").slice(0, 12);
   const names = identifiers(source);
   let serial = 0;
@@ -39,6 +35,15 @@ export function lowerClosures(source: ts.SourceFile, checker: ts.TypeChecker): s
   }
   const captureNames = new Map<ClosureUnit, Map<ts.Symbol, string>>();
   for (const unit of units) captureNames.set(unit, new Map(unit.captures.map(capture => [capture.symbol, fresh("capture")])));
+  return { cellClass, cells, helperNames, callUnits, callbackUnits, removed, captureNames };
+}
+
+/** Expose captured state to Baguette's existing coroutine pass instead of emitting a closure runtime. */
+export function lowerClosures(source: ts.SourceFile, checker: ts.TypeChecker): string {
+  const units = closureUnits(source, checker);
+  if (!units.length) return source.text;
+  const factory = ts.factory;
+  const { cellClass, cells, helperNames, callUnits, callbackUnits, removed, captureNames } = closureBindings(source, units);
   const helpers = new Map<ts.ClassDeclaration, ts.MethodDeclaration[]>();
   const result = ts.transform(source, [context => root => {
     let current: ClosureUnit | null = null;
