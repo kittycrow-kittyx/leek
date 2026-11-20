@@ -25,7 +25,7 @@ export function emitWasm(compiler: string, input: LoweredProject, outputDir: str
     project: input.project,
     ...abi,
     intrinsicModules,
-    ...(intrinsicModules.length ? { preludeFile: wasmPrelude(compiler, dirname(input.project)) } : {}),
+    preludeFile: wasmPrelude(compiler, dirname(input.project)),
     typeAliases: { ...abi.typeAliases, ...nativeWidths, ...nullableAliases, ...requiredAliases },
     generatedDir: resolve(outputDir, "wat"),
     outDir: outputDir,

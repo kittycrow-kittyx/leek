@@ -93,3 +93,23 @@ function run(name: string): string { try { const result = checked(receiver().get
 console.log(JSON.stringify([["zero", "negative", "nan", "missing"].map(run), events]));`;
   assert.match(transform(input, helper).text, /\.has\(/);
 });
+
+test("bigint consumers preserve zero, 64-bit boundaries, missing keys and evaluation order", () => {
+  const helper = `export const events: string[] = [];
+export function checked<T>(value: T | null, message: string): T {
+  events.push(message);
+  if (value === null) throw new Error(message);
+  return value;
+}`;
+  const input = `import { checked, events } from "./helper.js";
+const values = new BigInt64Array([0n, -1n, 9223372036854775807n, -9223372036854775808n]);
+const map = new Map<string, bigint>([["zero", 0n], ["high", 18446744073709551615n]]);
+function receiver(): BigInt64Array { events.push("receiver"); return values; }
+function label(): string { events.push("label"); return "absent"; }
+function run(index: number): string { try { return String(checked(receiver()[index] ?? null, label())); } catch (error) { return error instanceof Error ? error.message : "unexpected"; } }
+function lookup(key: string): string { try { return String(checked(map.get(key) ?? null, key)); } catch (error) { return error instanceof Error ? error.message : "unexpected"; } }
+console.log(JSON.stringify([[-1,-0,0,0.5,1,2,3,4,NaN,Infinity].map(run), ["zero","high","missing"].map(lookup), events]));`;
+  const output = transform(input, helper);
+  assert.doesNotMatch(output.text, /checked\(receiver\(\)\[|checked\(map.get/);
+  assert.match(output.text, /0n/);
+});

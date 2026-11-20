@@ -179,3 +179,13 @@ test("primitive map defaults retain diagnostics until missing values have distin
     assert.equal(lowerNullable(input, program.getTypeChecker()).text, source);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("bigint typed-array defaults keep signed and unsigned values without numeric conversion", () => {
+  const source = `const events: string[] = [];
+const signed = new BigInt64Array([0n, -1n, 9223372036854775807n, -9223372036854775808n]);
+const unsigned = new BigUint64Array([0n, 18446744073709551615n]);
+function fallback(): bigint { events.push("fallback"); return 42n; }
+function run(index: number): string[] { return [String(signed[index] ?? fallback()), String(unsigned[index] ?? fallback()), String(signed.at(index) ?? fallback())]; }
+console.log(JSON.stringify([[-5,-1,-0,0,0.5,1,2,3,4,NaN,Infinity,-Infinity].map(run), events]));`;
+  assert.equal(check(source), check(source, false));
+});

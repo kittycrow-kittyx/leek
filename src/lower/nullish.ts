@@ -160,7 +160,8 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
       const fallbackValue = checker.getTypeAtLocation(node.right);
       const fallbackType = checker.typeToTypeNode(fallbackValue, node, ts.NodeBuilderFlags.NoTruncation) ?? null;
       const fallbackParts = fallbackValue.isUnion() ? fallbackValue.types : [fallbackValue];
-      const nativeNumber = fallbackParts.every(part => Boolean(part.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.Never)));
+      const nativeFamily = typed && typed.startsWith("Big") ? ts.TypeFlags.BigIntLike : ts.TypeFlags.NumberLike;
+      const nativeNumber = fallbackParts.every(part => Boolean(part.flags & (nativeFamily | ts.TypeFlags.Never)));
       if (kind && (kind !== "typed" || nativeNumber) && numericIndex && numericIndex.flags & ts.TypeFlags.NumberLike && receiverType && elementType && fallbackType && receiverExpression && index) {
         const receiver = fresh();
         const at = fresh();

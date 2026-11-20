@@ -46,7 +46,7 @@ export function lowerArrayLoop(input: ArrayLoop): ts.Block {
   const increment = iteration.incrementor ?? null;
   if (!array || !index || !first || !ts.isVariableStatement(first) || !item || !value || !condition || !increment) throw new Error("Leek WASM: missing Bake loop bindings");
   const factory = ts.factory;
-  const itemType = nativeItem ? factory.createTypeReferenceNode(unsigned) : factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword);
+  const itemType = name.startsWith("Big") ? factory.createKeywordTypeNode(ts.SyntaxKind.BigIntKeyword) : nativeItem ? factory.createTypeReferenceNode(unsigned) : factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword);
   const declaration = factory.updateVariableStatement(capture, capture.modifiers ?? [], factory.updateVariableDeclarationList(capture.declarationList, [
     nativeVariable(array.name, factory.createTypeReferenceNode(name), ts.visitNode(loop.expression, visit, ts.isExpression) ?? loop.expression)
   ]));

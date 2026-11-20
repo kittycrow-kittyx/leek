@@ -56,7 +56,7 @@ function specialisedFunction(plan: Specialisation, checker: ts.TypeChecker): ts.
   } finally { result.dispose(); }
 }
 
-/** Keep typed-array optional Numbers as a presence bit plus native Number when a checked helper immediately consumes them. */
+/** Keep typed-array optional primitives as a presence bit plus native value when a checked helper immediately consumes them. */
 export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeChecker): Map<string, string> {
   const f = ts.factory;
   const fileNames = new Map(files.map(file => [file, identifiers(file)]));
@@ -111,7 +111,7 @@ export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeC
           f.createAssignment(index, ts.visitNode(input.index, visit, ts.isExpression) ?? input.index),
           f.createAssignment(present, input.array ? indexGuard(array, index) : f.createCallExpression(f.createPropertyAccessExpression(array, "has"), [], [index]))
         ]));
-        const value = f.createConditionalExpression(present, f.createToken(ts.SyntaxKind.QuestionToken), f.createNonNullExpression(input.array ? f.createElementAccessExpression(array, indexCast(index, "LeekRequiredIndex")) : f.createCallExpression(f.createPropertyAccessExpression(array, "get"), [], [index])), f.createToken(ts.SyntaxKind.ColonToken), f.createNumericLiteral(0));
+        const value = f.createConditionalExpression(present, f.createToken(ts.SyntaxKind.QuestionToken), f.createNonNullExpression(input.array ? f.createElementAccessExpression(array, indexCast(index, "LeekRequiredIndex")) : f.createCallExpression(f.createPropertyAccessExpression(array, "get"), [], [index])), f.createToken(ts.SyntaxKind.ColonToken), input.bigint ? f.createBigIntLiteral("0n") : f.createNumericLiteral(0));
         const path = relative(dirname(source.fileName), helperSource.fileName).split(sep).join("/").replace(/\.ts$/, ".js");
         const specifier = path.startsWith(".") ? path : "./" + path;
         if (helperSource !== source) imports.set(plan.namespace, specifier);

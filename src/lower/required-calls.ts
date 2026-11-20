@@ -10,6 +10,7 @@ export interface RequiredCall {
   receiverType: ts.TypeNode;
   indexType: ts.TypeNode;
   array: boolean;
+  bigint: boolean;
   helper: ts.FunctionDeclaration;
   signature: ts.Signature;
   typeParameter: ts.Symbol;
@@ -86,7 +87,7 @@ export function requiredCall(node: ts.Node, checker: ts.TypeChecker): RequiredCa
   const receiverType = arrayName ? ts.factory.createTypeReferenceNode(arrayName) : map ? map.receiverType : null;
   const indexType = arrayName ? ts.factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword) : map ? map.keyType : null;
   const valid = index ? checker.getTypeAtLocation(index).flags & (arrayName ? ts.TypeFlags.NumberLike : ts.TypeFlags.StringLike) : 0;
-  if (!receiver || !index || !receiverType || !indexType || !valid || map && (!(map.valueType.flags & ts.TypeFlags.NumberLike) || map.keyType.kind !== ts.SyntaxKind.StringKeyword)) return null;
+  if (!receiver || !index || !receiverType || !indexType || !valid || map && (!(map.valueType.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.BigIntLike)) || map.keyType.kind !== ts.SyntaxKind.StringKeyword)) return null;
   const signature = checker.getResolvedSignature(node) ?? null;
   const helper = signature ? signature.getDeclaration() ?? null : null;
   if (!signature || !helper || !ts.isFunctionDeclaration(helper) || !ts.isSourceFile(helper.parent) || !(helper.name ?? null) || !(helper.body ?? null) || (helper.typeParameters ?? []).length !== 1 || helper.parameters.length !== node.arguments.length) return null;
@@ -100,10 +101,11 @@ export function requiredCall(node: ts.Node, checker: ts.TypeChecker): RequiredCa
   const input = first ? checker.getTypeOfSymbolAtLocation(first, node) : null;
   if (!input || !input.isUnion() || !input.types.some(type => Boolean(type.flags & ts.TypeFlags.Null))) return null;
   const primitive = checker.getNonNullableType(input);
-  if (!(primitive.flags & ts.TypeFlags.NumberLike) || !(signature.getReturnType().flags & ts.TypeFlags.NumberLike)) return null;
+  const family = arrayName && arrayName.startsWith("Big") || map && map.valueType.flags & ts.TypeFlags.BigIntLike ? ts.TypeFlags.BigIntLike : ts.TypeFlags.NumberLike;
+  if (!(primitive.flags & family) || !(signature.getReturnType().flags & family)) return null;
   const others = signature.parameters.slice(1).map(parameter => checker.getTypeOfSymbolAtLocation(parameter, node));
   if (others.some(type => !(type.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.StringLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.BigIntLike)))) return null;
   const parameter = (helper.typeParameters ?? [])[0] ?? null;
   const typeParameter = parameter ? checker.getSymbolAtLocation(parameter.name) ?? null : null;
-  return typeParameter && parameterSafe(helper, checker) ? { call: node, receiver, index, receiverType, indexType, array: arrayName !== null, helper, signature, typeParameter } : null;
+  return typeParameter && parameterSafe(helper, checker) ? { call: node, receiver, index, receiverType, indexType, array: arrayName !== null, bigint: family === ts.TypeFlags.BigIntLike, helper, signature, typeParameter } : null;
 }

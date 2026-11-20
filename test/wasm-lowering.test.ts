@@ -119,3 +119,12 @@ test("native source names do not collide with checking-only intrinsic imports", 
   assert.match(output, /LeekF64\.isFinite/);
   assert.equal(execute(output, "run()"), execute(input, "run()"));
 });
+
+test("bigint typed-array loops keep 64-bit values and never use Number storage", () => {
+  const source = `function run(values: BigInt64Array): bigint { let result = 0n; for (const value of values) result ^= value; return result; }`;
+  const output = lowered(source);
+  assert.match(output, /: bigint/);
+  assert.doesNotMatch(output, / of values|as number|as LeekNativeU32/);
+  const expression = 'String(run(new BigInt64Array([0n, 9223372036854775807n, -9223372036854775808n])))';
+  assert.equal(execute(output, expression), execute(source, expression));
+});

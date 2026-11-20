@@ -3,7 +3,7 @@ import ts from "typescript";
 export const nativeWidths = { LeekNativeI32: "i32", LeekNativeU32: "u32" } as const;
 export const signed = "LeekNativeI32";
 export const unsigned = "LeekNativeU32";
-const arrays = new Set(["Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array", "Int32Array", "Uint32Array", "Float32Array", "Float64Array"]);
+const arrays = new Set(["Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array", "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array"]);
 const bitwise = new Set([
   ts.SyntaxKind.CaretToken, ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken,
   ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.GreaterThanGreaterThanToken,
@@ -72,7 +72,7 @@ function integerInitialiser(declaration: ts.VariableDeclaration, checker: ts.Typ
   const loop = list.parent;
   if (!ts.isForOfStatement(loop) || loop.initializer !== list || (loop.awaitModifier ?? null)) return false;
   const name = arrayType(checker.getTypeAtLocation(loop.expression));
-  return name !== null && !name.startsWith("Float");
+  return name !== null && !name.startsWith("Float") && !name.startsWith("Big");
 }
 
 function integerUse(reference: ts.Identifier, declaration: ts.VariableDeclaration, checker: ts.TypeChecker): boolean {

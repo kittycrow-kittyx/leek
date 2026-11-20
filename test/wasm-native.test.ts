@@ -40,6 +40,11 @@ function numericCases(): number[] {
 
 function checkNumbers(exports: WebAssembly.Exports): void {
   assert.equal(call(exports, "nativeEnvironment"), 1, "native WASM uses the source fallback for absent browser capabilities");
+  assert.equal(call(exports, "bigintLoop"), reference.bigintLoop());
+  for (const index of [-1, -0, 0, 0.5, 1, NaN, Infinity, 4294967296]) {
+    assert.equal(call(exports, "indexedBigInt", index), reference.indexedBigInt(index));
+    for (const variant of [0, 1, 2, 3]) assert.equal(call(exports, "requiredBigInt", index, variant), reference.requiredBigInt(index, variant));
+  }
   const operations = { multiply: reference.multiply, xor: reference.xor, and: reference.and, or: reference.or,
     shl: reference.shl, shr: reference.shr, ushr: reference.ushr };
   const values = numericCases();

@@ -174,3 +174,29 @@ export function nativeEnvironment(): number {
   if (typeof navigator === "undefined") return 1;
   return navigator.hardwareConcurrency;
 }
+
+export function requiredBigInt(index: number, variant: number): number {
+  const signed: BigInt64Array = new BigInt64Array(1);
+  const unsigned: BigUint64Array = new BigUint64Array(1);
+  const expected = variant === 0 ? 0n : variant === 1 ? -1n : variant === 2 ? 9223372036854775807n : -9223372036854775808n;
+  signed[0] = expected;
+  unsigned[0] = variant === 0 ? 0n : 18446744073709551615n;
+  const a = requiredOr(signed[index] ?? null, 7n);
+  const b = requiredOr(unsigned[index] ?? null, 7n);
+  return (a === expected ? 1 : a === 7n ? 2 : 0) + (b === (variant === 0 ? 0n : 18446744073709551615n) ? 4 : b === 7n ? 8 : 0);
+}
+
+export function indexedBigInt(index: number): number {
+  const values: BigInt64Array = new BigInt64Array(1);
+  values[0] = -9223372036854775808n;
+  return (values[index] ?? 13n) === 13n ? 1 : 2;
+}
+
+export function bigintLoop(): number {
+  const values: BigInt64Array = new BigInt64Array(2);
+  values[0] = 9223372036854775807n;
+  values[1] = -9223372036854775808n;
+  let result: bigint = 0n;
+  for (const value of values) result ^= value;
+  return result === -1n ? 1 : 0;
+}
