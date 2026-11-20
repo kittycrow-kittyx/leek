@@ -142,3 +142,13 @@ export function removedReference(which: number): number {
   }
   return result + values.length;
 }
+
+export function relativeReference(index: number): number {
+  const values: string[] = new Array<string>(3);
+  values[0] = ""; values[2] = "last";
+  return (values.at(index) ?? "missing").length;
+}
+
+export function relativeString(index: number): number {
+  return ("A😀Z".at(index) ?? "?").charCodeAt(0);
+}

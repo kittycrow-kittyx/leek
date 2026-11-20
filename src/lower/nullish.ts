@@ -63,6 +63,12 @@ function referenceRemoval(expression: ts.Expression, checker: ts.TypeChecker): t
   return librarySymbol(checker.getSymbolAtLocation(member.name) ?? null) ? member : null;
 }
 
+function relativeAccess(expression: ts.Expression, checker: ts.TypeChecker): ts.CallExpression | null {
+  if (!ts.isCallExpression(expression) || expression.arguments.length !== 1 || (expression.questionDotToken ?? null) || !ts.isPropertyAccessExpression(expression.expression)) return null;
+  const member = expression.expression;
+  return !(member.questionDotToken ?? null) && member.name.text === "at" && librarySymbol(checker.getSymbolAtLocation(member.name) ?? null) ? expression : null;
+}
+
 function guaranteedPresent(expression: ts.Expression, checker: ts.TypeChecker): boolean {
   const node = unwrap(expression);
   if (ts.isLiteralExpression(node) || ts.isTemplateExpression(node) || ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node) || ts.isNewExpression(node)) return true;
@@ -164,17 +170,20 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
         ])), resultType);
       }
       const indexed = unwrap(node.left);
-      const kind = ts.isElementAccessExpression(indexed) && !(indexed.questionDotToken ?? null) ? indexedKind(indexed.expression, checker) : null;
-      const index = ts.isElementAccessExpression(indexed) ? indexed.argumentExpression ?? null : null;
+      const relative = relativeAccess(indexed, checker);
+      const member = relative && ts.isPropertyAccessExpression(relative.expression) ? relative.expression : null;
+      const receiverExpression = ts.isElementAccessExpression(indexed) && !(indexed.questionDotToken ?? null) ? indexed.expression : member ? member.expression : null;
+      const kind = receiverExpression ? indexedKind(receiverExpression, checker) : null;
+      const index = ts.isElementAccessExpression(indexed) ? indexed.argumentExpression ?? null : relative ? relative.arguments[0] ?? null : null;
       const numericIndex = index ? checker.getTypeAtLocation(index) : null;
-      const typed = ts.isElementAccessExpression(indexed) ? arrayType(checker.getTypeAtLocation(indexed.expression)) : null;
-      const receiverType = typed ? factory.createTypeReferenceNode(typed) : ts.isElementAccessExpression(indexed) ? checker.typeToTypeNode(checker.getTypeAtLocation(indexed.expression), indexed, ts.NodeBuilderFlags.NoTruncation) ?? null : null;
+      const typed = receiverExpression ? arrayType(checker.getTypeAtLocation(receiverExpression)) : null;
+      const receiverType = typed ? factory.createTypeReferenceNode(typed) : receiverExpression ? checker.typeToTypeNode(checker.getTypeAtLocation(receiverExpression), indexed, ts.NodeBuilderFlags.NoTruncation) ?? null : null;
       const elementType = checker.typeToTypeNode(checker.getNonNullableType(checker.getTypeAtLocation(node.left)), node, ts.NodeBuilderFlags.NoTruncation) ?? null;
       const fallbackValue = checker.getTypeAtLocation(node.right);
       const fallbackType = checker.typeToTypeNode(fallbackValue, node, ts.NodeBuilderFlags.NoTruncation) ?? null;
       const fallbackParts = fallbackValue.isUnion() ? fallbackValue.types : [fallbackValue];
       const nativeNumber = fallbackParts.every(part => Boolean(part.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.Never)));
-      if (kind && (kind !== "typed" || nativeNumber) && numericIndex && numericIndex.flags & ts.TypeFlags.NumberLike && receiverType && elementType && fallbackType && ts.isElementAccessExpression(indexed) && index) {
+      if (kind && (kind !== "typed" || nativeNumber) && numericIndex && numericIndex.flags & ts.TypeFlags.NumberLike && receiverType && elementType && fallbackType && receiverExpression && index) {
         const receiver = fresh();
         const at = fresh();
         scope.push(nativeVariable(receiver, receiverType, null), nativeVariable(at, factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword), null));
@@ -192,9 +201,15 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
           factory.createToken(ts.SyntaxKind.ColonToken), factory.createNull()), ts.SyntaxKind.QuestionQuestionToken, fallback) :
           factory.createConditionalExpression(valid, factory.createToken(ts.SyntaxKind.QuestionToken), value, factory.createToken(ts.SyntaxKind.ColonToken), fallback);
         changed = true;
+        const relativeIndex = relative ? [
+          factory.createAssignment(at, factory.createConditionalExpression(factory.createBinaryExpression(at, ts.SyntaxKind.ExclamationEqualsEqualsToken, at), factory.createToken(ts.SyntaxKind.QuestionToken), factory.createNumericLiteral(0), factory.createToken(ts.SyntaxKind.ColonToken),
+            factory.createBinaryExpression(at, ts.SyntaxKind.MinusToken, factory.createBinaryExpression(at, ts.SyntaxKind.PercentToken, factory.createNumericLiteral(1))))),
+          factory.createAssignment(at, factory.createConditionalExpression(factory.createBinaryExpression(at, ts.SyntaxKind.LessThanToken, factory.createNumericLiteral(0)), factory.createToken(ts.SyntaxKind.QuestionToken),
+            factory.createBinaryExpression(at, ts.SyntaxKind.PlusToken, factory.createPropertyAccessExpression(receiver, "length")), factory.createToken(ts.SyntaxKind.ColonToken), at))
+        ] : [];
         return factory.createSatisfiesExpression(factory.createParenthesizedExpression(factory.createCommaListExpression([
-          factory.createAssignment(receiver, ts.visitNode(indexed.expression, visit, ts.isExpression) ?? indexed.expression),
-          factory.createAssignment(at, ts.visitNode(index, visit, ts.isExpression) ?? index), selection
+          factory.createAssignment(receiver, ts.visitNode(receiverExpression, visit, ts.isExpression) ?? receiverExpression),
+          factory.createAssignment(at, ts.visitNode(index, visit, ts.isExpression) ?? index), ...relativeIndex, selection
         ])), factory.createUnionTypeNode([elementType, fallbackType]));
       }
       if (lookup && resultType) {

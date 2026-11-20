@@ -142,6 +142,18 @@ console.log(JSON.stringify([run(), values.length, events]));`;
   assert.equal(check(source), check(source, false));
 });
 
+test("relative defaults preserve truncation, negative offsets and receiver evaluation", () => {
+  const source = `export {};
+const events: string[] = [];
+const values = new Array<string>(3); values[0] = ""; values[2] = "last";
+function receiver(): string[] { events.push("receiver"); return values; }
+function key(value: number): number { events.push("key"); return value; }
+function fallback(): string { events.push("fallback"); return "missing"; }
+function run(index: number): string[] { return [receiver().at(key(index)) ?? fallback(), "A😀Z".at(key(index)) ?? fallback()]; }
+console.log(JSON.stringify([[-5, -4, -3, -2, -1, -0.5, -0, 0, 0.5, 1, 2, 3, 4, NaN, Infinity, -Infinity].map(run), events]));`;
+  assert.equal(check(source), check(source, false));
+});
+
 test("typed-array defaults requiring optional primitive storage retain their source form", () => {
   const source = 'function run(values: Uint8Array, index: number): number | null { return values[index] ?? null; }';
   const root = mkdtempSync(join(tmpdir(), "leek-nullable-number-"));

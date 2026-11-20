@@ -12,6 +12,8 @@ Typed-array index lowering accepts Number fallbacks. The source `values[index] ?
 
 Reference-array `pop` and `shift` defaults capture the receiver and check its length before calling the existing array operation. Empty arrays select the fallback without invoking the native operation. A removed reference hole also selects the fallback. Bake lowers the resulting nullable selection after the checker is rebuilt.
 
+Standard `at(index)` defaults share indexed lowering. The index is truncated towards zero and negative indices are offset from the captured receiver's length. The bounds check precedes the native read. NaN and signed zero select index zero; infinite indices select the fallback.
+
 `nullableAliases` maps the checked `LeekArrayIndex` cast to native i32 after the bounds and integrality checks. Generated indexed bindings reject collisions with existing source identifiers.
 
 | Checking type | Native type |
