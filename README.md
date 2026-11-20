@@ -21,8 +21,9 @@ Leek stages that graph without maintaining another kernel or userspace source tr
 
 Source analysis and lowering are available for all three targets. The
 WebAssembly path uses the released Baguette compiler process, including its
-mandatory Bake stage. Whole-system language coverage and the boot ABI remain
-incomplete. Resolving the full canonical graph does not establish that the OS
+mandatory Bake stage. The boot entry currently fails on exceptions, captured
+async callbacks and host globals. Its Host argument and Os result also need a
+numeric ABI. Resolving the full canonical graph does not establish that the OS
 has compiled or booted. C and Rust work is deferred.
 
 ## Requirements
