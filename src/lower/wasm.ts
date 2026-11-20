@@ -33,6 +33,21 @@ export interface WasmLowering {
   views: string[];
 }
 
+/** Validate reserved bindings before printing staged source and its checking-only imports. */
+function printWasm(source: ts.SourceFile, lowered: ts.SourceFile, flags: Omit<WasmLowering, "text">, widths: boolean, intrinsicSpecifier: string): string {
+  const bindings = [...(flags.usesMultiply ? ["LeekMulU32"] : []), ...(flags.usesPredicates ? ["LeekF64"] : []), ...(flags.usesCoercion ? ["LeekNativeMath"] : []), ...(flags.usesUnchecked ? ["unchecked"] : []), ...flags.views.map(viewName)];
+  const reserved = new Set([...bindings, ...(widths ? Object.keys(nativeWidths) : [])]);
+  const check = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && reserved.has(node.text)) throw new Error("Leek WASM: reserved native binding " + node.text + " in " + source.fileName);
+    ts.forEachChild(node, check);
+  };
+  check(source);
+  const aliases = widths ? Object.keys(nativeWidths).map(name => "type " + name + " = number;\n").join("") : "";
+  const imports = bindings.length ? "import { " + bindings.join(", ") + " } from " + JSON.stringify(intrinsicSpecifier) + ";\n" : "";
+  const body = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed }).printFile(lowered);
+  return imports + aliases + body;
+}
+
 function labelledLoop(node: ts.Node): { loop: ts.ForOfStatement; labels: ts.Identifier[] } | null {
   const labels: ts.Identifier[] = [];
   while (ts.isLabeledStatement(node)) { labels.push(node.label); node = node.statement; }
@@ -135,17 +150,7 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
   try {
     const flags = { usesMultiply: used.multiply, usesPredicates: used.predicates, usesCoercion: used.coercion, usesUnchecked: used.unchecked, views: [...views] };
     if (!used.changed) return { text: source.text, ...flags };
-    const bindings = [...(used.multiply ? ["LeekMulU32"] : []), ...(used.predicates ? ["LeekF64"] : []), ...(used.coercion ? ["LeekNativeMath"] : []), ...(used.unchecked ? ["unchecked"] : []), ...[...views].map(viewName)];
-    const reserved = new Set([...bindings, ...(used.widths ? Object.keys(nativeWidths) : [])]);
-    const check = (node: ts.Node): void => {
-      if (ts.isIdentifier(node) && reserved.has(node.text)) throw new Error("Leek WASM: reserved native binding " + node.text + " in " + source.fileName);
-      ts.forEachChild(node, check);
-    };
-    check(source);
-    const aliases = used.widths ? Object.keys(nativeWidths).map(name => "type " + name + " = number;\n").join("") : "";
-    const imports = bindings.length ? "import { " + bindings.join(", ") + " } from " + JSON.stringify(intrinsicSpecifier) + ";\n" : "";
-    const body = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed }).printFile(result.transformed[0] ?? source);
-    return { text: imports + aliases + body, ...flags };
+    return { text: printWasm(source, result.transformed[0] ?? source, flags, used.widths, intrinsicSpecifier), ...flags };
   } finally { result.dispose(); }
 }
 
