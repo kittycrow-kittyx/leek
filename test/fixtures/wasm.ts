@@ -34,3 +34,20 @@ export function assignmentResult(): number {
   let value = 0;
   return (value = Math.imul(-1, 1)) > 0 ? 1 : 0;
 }
+
+type F64 = number;
+function mulU32(left: F64, right: F64): F64 { return Math.imul(left, right) >>> 0; }
+
+export function canonicalBindings(value: number): number {
+  const NativeMath = value + 1;
+  return mulU32(value, 3) + (Number.isFinite(NativeMath) ? 1 : 0);
+}
+
+let nullableCalls = 0;
+function maybe(present: boolean): string | null { nullableCalls++; return present ? "value" : null; }
+function fallback(): string { nullableCalls++; return "other"; }
+export function nullableEffect(flag: number): number {
+  nullableCalls = 0;
+  const value = maybe(flag !== 0) ?? fallback();
+  return nullableCalls * 10 + value.length;
+}

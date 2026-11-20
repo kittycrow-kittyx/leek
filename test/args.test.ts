@@ -28,3 +28,10 @@ test("analysis and validation are explicit", () => {
   assert.throws(() => options(["--source"], process.cwd()), /Missing value/);
   assert.throws(() => options(["--target=javascript"], process.cwd()), /Expected target/);
 });
+
+test("downstream output is relative to its caller", () => {
+  const cwd = resolve("mikuOS-teto");
+  assert.equal(options(["--out-dir=build/reference"], cwd).output, resolve(cwd, "build/reference"));
+  assert.equal(options([], cwd).output, null);
+  assert.throws(() => options(["--out-dir"], cwd), /Missing value/);
+});

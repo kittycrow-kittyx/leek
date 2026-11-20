@@ -2,12 +2,15 @@ name: Transpiler validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'refactor/**']
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  ORT_DISABLE_TELEMETRY: '1'
 
 jobs:
   validate:

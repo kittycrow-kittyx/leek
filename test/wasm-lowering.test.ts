@@ -39,7 +39,7 @@ test("native numeric bindings preserve Number coercion and wraparound", () => {
   const input = "function calculate(a: number, b: number): number[] { return [a ^ b, a & b, a | b, a << b, a >> b, a >>> b, Math.imul(a, b)]; }";
   const output = lowered(input);
   assert.ok(output.includes("Math.imul(a, b)"));
-  assert.match(output, /import \{ NativeMath \}/);
+  assert.match(output, /import \{ LeekNativeMath \}/);
   assert.ok(!output.includes("function __leek_"));
   assert.ok(!output.includes("65535"));
   const values = "[NaN,Infinity,-Infinity,-4294967297,-2147483648,-1.9,-0,0,1.9,2147483647,4294967295,4294967296,9007199254740991]";
@@ -73,8 +73,8 @@ test("a locally declared typed-array lookalike is not a library array", () => {
 test("WASM Number predicates bind the existing AssemblyScript F64 methods", () => {
   const input = "function check(n: number): boolean[] { return [Number.isNaN(n), Number.isFinite(n), Number.isInteger(n), Number.isSafeInteger(n)]; }";
   const output = lowered(input);
-  assert.match(output, /import \{ F64 \}/);
-  for (const method of ["isNaN", "isFinite", "isInteger", "isSafeInteger"]) assert.ok(output.includes("F64." + method + "("));
+  assert.match(output, /import \{ LeekF64 \}/);
+  for (const method of ["isNaN", "isFinite", "isInteger", "isSafeInteger"]) assert.ok(output.includes("LeekF64." + method + "("));
   assert.ok(!output.includes("__leek_is"));
   const expression = "[NaN,Infinity,-Infinity,-0,0,0.5,-0.5,42,-42,Number.MAX_VALUE,Number.MIN_VALUE,Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER+1].map(check)";
   assert.equal(execute(output, expression), execute(input, expression));
@@ -109,6 +109,13 @@ test("Bake's typed-array loop adapter preserves labels, nested loops and side ef
 test("integer coercion ignores locally shadowed Math objects", () => {
   const input = "function run(Math: { imul(a: number, b: number): number }): number { return 3.8 ^ 2.1; }";
   const output = lowered(input);
-  assert.match(output, /NativeMath\.imul/);
+  assert.match(output, /LeekNativeMath\.imul/);
   assert.equal(execute(output, "run({ imul: () => 99 })"), execute(input, "run({ imul: () => 99 })"));
+});
+
+test("native source names do not collide with checking-only intrinsic imports", () => {
+  const input = "type F64 = number; function mulU32(left: F64, right: F64): F64 { return Math.imul(left, right) >>> 0; } function run(): number { const NativeMath = 2; return mulU32(3, 4) + (Number.isFinite(NativeMath) ? 1 : 0); }";
+  const output = lowered(input);
+  assert.match(output, /LeekF64\.isFinite/);
+  assert.equal(execute(output, "run()"), execute(input, "run()"));
 });

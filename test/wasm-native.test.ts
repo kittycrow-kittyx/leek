@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,6 +9,7 @@ import binaryen from "binaryen";
 import { stageSource } from "../src/lower/index.ts";
 import { emitWasm } from "../src/wasm.ts";
 import { requirePin } from "../src/project.ts";
+import { linkWat } from "../src/wat.ts";
 import * as reference from "./fixtures/wasm.ts";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,6 +46,8 @@ function checkNumbers(exports: WebAssembly.Exports): void {
     for (const a of values) for (const b of values) assert.equal(call(exports, name, a, b), operation(a, b), `${name}(${a}, ${b})`);
   }
   for (const value of values) assert.equal(call(exports, "predicates", value), reference.predicates(value));
+  for (const value of values) assert.equal(call(exports, "canonicalBindings", value), reference.canonicalBindings(value));
+  for (const value of [0, 1]) assert.equal(call(exports, "nullableEffect", value), reference.nullableEffect(value));
   for (const [name, expected] of [["signedRead", -1], ["widerWrite", 1], ["assignmentResult", 0]] as const) assert.equal(call(exports, name), expected);
 }
 
@@ -115,6 +119,12 @@ test("compiled WASM preserves numeric semantics, rooted buffers and native check
     const input = stageSource(root, entry, join(root, "work"), false);
     emitWasm(requirePin(repository, "baguette"), input, join(root, "output"));
     const bytes = readFileSync(join(root, "output", "leek.wasm"));
+    const linked = join(root, "linked.wat");
+    writeFileSync(linked, linkWat(join(root, "output/wat/leek/layout.json")));
+    const rebuilt = join(root, "rebuilt.wasm");
+    execFileSync(process.execPath, [join(repository, "baguette/node_modules/.bin/wasm-opt"), linked,
+      "-O3", "--all-features", "--strip-debug", "-o", rebuilt]);
+    assert.deepEqual(readFileSync(rebuilt), bytes, "independent modular WAT compilation reproduces Baguette's reference binary");
     const memory = new WebAssembly.Memory({ initial: 1024, maximum: 32768 });
     const module = new WebAssembly.Module(bytes);
     assert.deepEqual(WebAssembly.Module.imports(module).map(item => item.module + "." + item.name).sort(), ["env.abort", "env.memory"]);
