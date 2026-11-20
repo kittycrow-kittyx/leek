@@ -60,6 +60,7 @@ function sameReceiver(node: ts.Node, owner: ts.MethodDeclaration): boolean {
   return true;
 }
 
+/** Lift only direct calls after initialisation with the original receiver; escaping references could outlive capture cells. */
 function directCalls(source: ts.SourceFile, arrow: ts.ArrowFunction, variable: ts.VariableDeclaration | null, owner: ts.MethodDeclaration, checker: ts.TypeChecker): ts.CallExpression[] | null {
   if (!variable) {
     let expression: ts.Expression = arrow;
