@@ -200,3 +200,16 @@ function run(index: number): number { return receiver().codePointAt(key(index)) 
 console.log(JSON.stringify([[-1,-0.5,-0,0,0.5,1,1.9,2,3,4,5,NaN,Infinity,-Infinity,4294967296].map(run), events]));`;
   assert.equal(check(source), check(source, false));
 });
+
+
+test("standard array-derived match results preserve missing captures and indexed defaults", () => {
+  const source = `const events: string[] = [];
+function fallback(): string { events.push("fallback"); return "missing"; }
+function run(input: string, index: number): string {
+  const match = /^(a)?(b*)$/.exec(input);
+  if (match === null) return "no match";
+  return match[index] ?? fallback();
+}
+console.log(JSON.stringify(["", "a", "bbb", "abbb", "x"].flatMap(input => [-1,-0,0,0.5,1,2,3,NaN,Infinity].map(index => run(input,index))), events));`;
+  assert.equal(check(source), check(source, false));
+});

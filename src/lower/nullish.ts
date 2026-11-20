@@ -20,7 +20,8 @@ function indexedKind(receiver: ts.Expression, checker: ts.TypeChecker): "string"
   const type = checker.getTypeAtLocation(receiver);
   if (type.flags & ts.TypeFlags.StringLike) return "string";
   if (arrayType(type)) return "typed";
-  if (!checker.isArrayType(type) && !checker.isTupleType(type)) return null;
+  const inherited = type.isClassOrInterface() && librarySymbol(type.getSymbol() ?? null) && (type.getBaseTypes() ?? []).some(base => checker.isArrayType(base));
+  if (!checker.isArrayType(type) && !checker.isTupleType(type) && !inherited) return null;
   const element = checker.getIndexTypeOfType(type, ts.IndexKind.Number) ?? null;
   const reference = (value: ts.Type): boolean => value.isUnion() ? value.types.every(reference) :
     Boolean(value.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.Object | ts.TypeFlags.Null));
