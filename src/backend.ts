@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { requireBake, requirePin, type Target } from "./project.ts";
 import type { LoweredProject } from "./lower/index.ts";
+import { prepareWasmSource } from "./lower/prepare-wasm.ts";
 import { emitWasm } from "./wasm.ts";
 
 const compilers = { wasm: "baguette", clang: "croissant", rust: "crust" } as const;
@@ -10,6 +11,7 @@ interface Request {
   work: string;
   selected: Target;
   input: LoweredProject;
+  output: string;
   validateOnly: boolean;
   emit: boolean;
 }
@@ -20,9 +22,10 @@ export async function build(req: Request): Promise<void> {
   const compiler = requirePin(root, compilers[selected]);
   requireBake(compiler);
   if (selected === "wasm" && emit && !validateOnly) {
-    emitWasm(compiler, input, resolve(root, "dist", selected));
+    emitWasm(compiler, input, req.output);
     return;
   }
+  if (selected === "wasm") prepareWasmSource(input);
   const { bake, printBakeResult } = await compilerBake(selected);
   const lowered = resolve(work, "lowered");
   const result = bake({
@@ -34,7 +37,7 @@ export async function build(req: Request): Promise<void> {
   if (!result.success) throw new Error("Lowering failed");
   if (!emit || validateOnly || selected === "wasm") return;
   const manifestPath = resolve(lowered, "bake-manifest.json");
-  const outputDir = resolve(root, "dist", selected);
+  const outputDir = req.output;
   switch (selected) {
     case "clang": {
       const { compile } = await import("../croissant/src/compiler.ts");

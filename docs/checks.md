@@ -39,3 +39,10 @@ buffer lifetimes and checks native checksum loop instructions. The checksum
 loop requires byte loads, integer XOR and integer multiplication without
 floating-point operations. This checks architecture and correctness without
 measuring execution speed. Baguette's deterministic rebuild check remains enabled.
+
+The native test also links Baguette's emitted modular WAT independently and
+compiles it with the pinned Binaryen. The result must reproduce Baguette's
+reference binary exactly. Nullable expression tests check getters, lazy fallbacks,
+recursion, loops, local type scopes and native execution. Source staging tests
+require inherited kernel modules and reject escapes before a pass can write to
+canonical source. These fixtures do not establish whole-OS compilation or boot.

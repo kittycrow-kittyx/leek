@@ -34,3 +34,312 @@ export function assignmentResult(): number {
   let value = 0;
   return (value = Math.imul(-1, 1)) > 0 ? 1 : 0;
 }
+
+type F64 = number;
+function mulU32(left: F64, right: F64): F64 { return Math.imul(left, right) >>> 0; }
+
+export function canonicalBindings(value: number): number {
+  const NativeMath = value + 1;
+  return mulU32(value, 3) + (Number.isFinite(NativeMath) ? 1 : 0);
+}
+
+let nullableCalls = 0;
+function maybe(present: boolean): string | null { nullableCalls++; return present ? "value" : null; }
+function fallback(): string { nullableCalls++; return "other"; }
+export function nullableEffect(flag: number): number {
+  nullableCalls = 0;
+  const value = maybe(flag !== 0) ?? fallback();
+  return nullableCalls * 10 + value.length;
+}
+
+let asyncValue = 0;
+let asyncReady = false;
+let asyncCompletion: Promise<void> | null = null;
+
+class ClosureCounter {
+  private base = 3;
+
+  async run(input: number): Promise<number> {
+    const factor = input + this.base;
+    let count = 0;
+    const one = async (depth: number): Promise<number> => {
+      count++;
+      if (depth > 0) return await one(depth - 1) + factor;
+      return this.base + count;
+    };
+    const first = await one(2);
+    count += 1;
+    return first + await one(0);
+  }
+}
+
+async function completeClosure(input: number): Promise<void> {
+  asyncValue = await new ClosureCounter().run(input);
+  asyncReady = true;
+}
+
+export function beginClosure(input: number): number {
+  asyncReady = false;
+  asyncCompletion = completeClosure(input);
+  return 0;
+}
+
+export function closureReady(): number { return asyncCompletion !== null && asyncReady ? 1 : 0; }
+export function closureValue(): number { return asyncValue; }
+
+export function mapDefault(present: number, value: number): number {
+  const map: Map<string, number> = new Map<string, number>();
+  if (present !== 0) map.set("key", value);
+  return map.get("key") ?? -7;
+}
+
+class MapValue { constructor(readonly value: number) {} }
+export function mapReferenceDefault(present: number, value: number): number {
+  const map: Map<string, MapValue> = new Map<string, MapValue>();
+  if (present !== 0) map.set("key", new MapValue(value));
+  const item = map.get("key") ?? null;
+  return item === null ? -7 : item.value;
+}
+
+export function indexedByte(index: number): number {
+  const values: Uint8Array = new Uint8Array(3);
+  values[0] = 0; values[1] = 128; values[2] = 255;
+  return values[index] ?? -7;
+}
+
+export function indexedString(index: number): number {
+  const value = "A😀Z"[index] ?? "?";
+  return value.charCodeAt(0);
+}
+
+export function indexedReference(index: number): number {
+  const values: string[] = new Array<string>(3);
+  values[0] = ""; values[2] = "last";
+  const value = values[index] ?? "missing";
+  return value.length;
+}
+
+export function indexedObject(index: number): number {
+  const values: MapValue[] = new Array<MapValue>(3);
+  values[0] = new MapValue(0); values[2] = new MapValue(42);
+  const value = values[index] ?? null;
+  return value === null ? -7 : value.value;
+}
+
+export function indexedReadonly(index: number): number {
+  const values: readonly string[] = ["zero", "one"];
+  const value = values[index] ?? "?";
+  return value.length;
+}
+
+export function removedReference(which: number): number {
+  const values: string[] = new Array<string>(3);
+  values[0] = ""; values[2] = "last";
+  let result = 0;
+  for (let step = 0; step < 4; step++) {
+    const value = which === 0 ? values.pop() ?? "missing" : values.shift() ?? "missing";
+    result = result * 10 + value.length;
+  }
+  return result + values.length;
+}
+
+export function relativeReference(index: number): number {
+  const values: string[] = new Array<string>(3);
+  values[0] = ""; values[2] = "last";
+  return (values.at(index) ?? "missing").length;
+}
+
+export function relativeString(index: number): number {
+  return ("A😀Z".at(index) ?? "?").charCodeAt(0);
+}
+
+function requiredOr<T>(value: T | null, fallback: T): T {
+  if (value === null) return fallback;
+  return value;
+}
+
+export function requiredNumber(index: number, value: number): number {
+  const values: Float64Array = new Float64Array(1);
+  values[0] = value;
+  return requiredOr(values[index] ?? null, -7);
+}
+
+export function requiredMap(present: number, value: number): number {
+  const values: Map<string, number> = new Map<string, number>();
+  if (present !== 0) values.set("key", value);
+  return requiredOr(values.get("key") ?? null, -7);
+}
+
+export function nativeEnvironment(): number {
+  if (typeof navigator === "undefined") return 1;
+  return navigator.hardwareConcurrency;
+}
+
+export function requiredBigInt(index: number, variant: number): number {
+  const signed: BigInt64Array = new BigInt64Array(1);
+  const unsigned: BigUint64Array = new BigUint64Array(1);
+  const expected = variant === 0 ? 0n : variant === 1 ? -1n : variant === 2 ? 9223372036854775807n : -9223372036854775808n;
+  signed[0] = expected;
+  unsigned[0] = variant === 0 ? 0n : 18446744073709551615n;
+  const a = requiredOr(signed[index] ?? null, 7n);
+  const b = requiredOr(unsigned[index] ?? null, 7n);
+  return (a === expected ? 1 : a === 7n ? 2 : 0) + (b === (variant === 0 ? 0n : 18446744073709551615n) ? 4 : b === 7n ? 8 : 0);
+}
+
+export function indexedBigInt(index: number): number {
+  const values: BigInt64Array = new BigInt64Array(1);
+  values[0] = -9223372036854775808n;
+  return (values[index] ?? 13n) === 13n ? 1 : 2;
+}
+
+export function bigintLoop(): number {
+  const values: BigInt64Array = new BigInt64Array(2);
+  values[0] = 9223372036854775807n;
+  values[1] = -9223372036854775808n;
+  let result: bigint = 0n;
+  for (const value of values) result ^= value;
+  return result === -1n ? 1 : 0;
+}
+
+
+export function indexedCodePoint(index: number): number {
+  return "A😀\ud800Z".codePointAt(index) ?? -7;
+}
+
+export function requiredCodePoint(index: number): number {
+  return requiredOr("\0😀\ud800Z".codePointAt(index) ?? null, -7);
+}
+
+
+class SynchronousCapture {
+  private base = 3;
+  run(input: number): number {
+    let count = input;
+    const scale = input + this.base;
+    const walk = (depth: number): number => { count++; return depth > 0 ? walk(depth - 1) + scale : this.base + count; };
+    const first = walk(2);
+    count += 2;
+    return first + walk(0);
+  }
+}
+
+export function synchronousCapture(input: number): number { return new SynchronousCapture().run(input); }
+
+
+function applyPresent<T,R>(value: T | null, use: (value:T)=>R): R | null {
+  if (value === null) return null;
+  return use(value);
+}
+
+export function nullablePredicate(present: number, selected: number): number {
+  let calls = 0;
+  const value: string | null = present === 0 ? null : selected === 0 ? "" : "-S";
+  (applyPresent(value, item => item.startsWith("-")) ?? null) && calls++;
+  const matched = (true && (applyPresent(value, item => item.startsWith("-")) ?? null)) ? 1 : 0;
+  const result = !!(applyPresent(value, item => (calls++, item.startsWith("-"))) ?? null);
+  return matched * 10 + (result ? 2 : 0) + calls;
+}
+
+
+class PredicateReceiver {
+  private prefix = "-";
+  run(value: string | null): number {
+    return (applyPresent(value, item => item.startsWith(this.prefix)) ?? null) ? 1 : 0;
+  }
+}
+
+export function predicateReceiver(present: number, selected: number): number {
+  const receiver = new PredicateReceiver();
+  return receiver.run(present === 0 ? null : selected === 0 ? "" : "-S");
+}
+
+
+export function localCaught(input: number): number {
+  let total = 0;
+  for (let index = 0; index < 3; index++) {
+    try {
+      if (input < 0) throw new Error("negative");
+      total += input + index;
+    } catch (error) { total += error instanceof Error ? error.message.length : 0; }
+  }
+  return total;
+}
+
+export function localReturn(input: number): number {
+  try { if (input < 0) throw new Error("bad"); return input + 1; }
+  catch (error) { return error instanceof Error ? error.message.length : 0; }
+}
+
+export function localIgnored(input: number): number {
+  try { if (input < 0) throw new Error("bad"); return input; }
+  catch { return 7; }
+}
+
+
+export function localNested(input: number): number {
+  let total = 0;
+  try {
+    for (let outer = 0; outer < 3; outer++) {
+      for (let inner = 0; inner < 3; inner++) {
+        if (input === 1) continue;
+        total++;
+        if (input < 0) throw new Error("nested");
+        if (input === 0) break;
+      }
+      total += 10;
+    }
+    total += 100;
+  } catch (error) { total += error instanceof Error ? error.message.length : 0; }
+  return total;
+}
+
+export function optionalEquality(index: number, value: number): number {
+  const values = new Float64Array(4);
+  values[0] = 0; values[1] = -0; values[2] = NaN; values[3] = 7;
+  return ((values[index] ?? null) === value ? 1 : 0) + (value !== (values[index] ?? null) ? 2 : 0) +
+    ((values[index] ?? null) === null ? 4 : 0) + (null !== (values[index] ?? null) ? 8 : 0);
+}
+
+export function optionalWideEquality(index: number): number {
+  const values = new BigInt64Array(3);
+  values[0] = 0n; values[1] = -1n; values[2] = 9223372036854775807n;
+  return ((values[index] ?? null) === 0n ? 1 : 0) + (-1n !== (values[index] ?? null) ? 2 : 0) +
+    ((values[index] ?? null) === null ? 4 : 0);
+}
+
+export function optionalMapEquality(present: number, value: number): number {
+  const values = new Map<string, number>();
+  if (present !== 0) values.set("value", value);
+  return ((values.get("value") ?? null) === value ? 1 : 0) + ((values.get("value") ?? null) !== null ? 2 : 0);
+}
+
+export function optionalPointEquality(index: number): number {
+  const value = "\0😀";
+  return ((value.codePointAt(index) ?? null) === 0 ? 1 : 0) + ((value.codePointAt(index) ?? null) === 128512 ? 2 : 0) +
+    ((value.codePointAt(index) ?? null) === null ? 4 : 0);
+}
+
+export function bufferViewAlias(offset: number, length: number): number {
+  const buffer = new ArrayBuffer(32);
+  const all = new BigInt64Array(buffer);
+  const view = new BigInt64Array(buffer, offset, length);
+  if (view.length > 0) view[0] = -7n;
+  return view.length * 100 + view.byteOffset + (view.buffer === buffer ? 1 : 0) +
+    ((all[view.byteOffset / 8] ?? 0n) === -7n ? 2 : 0) + new Uint8Array().length;
+}
+
+export function mixedBufferViews(): number {
+  const buffer = new ArrayBuffer(16);
+  const bytes = new Uint8Array(buffer);
+  const words = new Uint16Array(buffer, 2, 2);
+  words[0] = 0x1234;
+  const unsigned = new BigUint64Array(buffer, 8, 1);
+  const signed = new BigInt64Array(buffer, 8);
+  unsigned[0] = 18446744073709551615n;
+  return (bytes[2] ?? 0) + (bytes[3] ?? 0) * 256 + ((signed[0] ?? 0n) === -1n ? 65536 : 0);
+}
+
+export function bufferViewLength(offset: number, length: number): number {
+  const view = new BigInt64Array(new ArrayBuffer(32), offset, length);
+  return view.length;
+}

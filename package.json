@@ -3,7 +3,7 @@
   "version": "0.1.0-dev.0",
   "private": true,
   "type": "module",
-  "description": "Leek Extends the Environment of KittyX. Ahead-of-time compiler for mikuOS.",
+  "description": "Leek Extends the Environment of KittyX. Ahead-of-time transpiler for canonical mikuOS.",
   "license": "MIT",
   "bin": {
     "leek": "src/cli.ts"

@@ -46,12 +46,12 @@ export function lowerArrayLoop(input: ArrayLoop): ts.Block {
   const increment = iteration.incrementor ?? null;
   if (!array || !index || !first || !ts.isVariableStatement(first) || !item || !value || !condition || !increment) throw new Error("Leek WASM: missing Bake loop bindings");
   const factory = ts.factory;
-  const itemType = nativeItem ? factory.createTypeReferenceNode(unsigned) : factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword);
+  const itemType = name.startsWith("Big") ? factory.createKeywordTypeNode(ts.SyntaxKind.BigIntKeyword) : nativeItem ? factory.createTypeReferenceNode(unsigned) : factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword);
   const declaration = factory.updateVariableStatement(capture, capture.modifiers ?? [], factory.updateVariableDeclarationList(capture.declarationList, [
     nativeVariable(array.name, factory.createTypeReferenceNode(name), ts.visitNode(loop.expression, visit, ts.isExpression) ?? loop.expression)
   ]));
   const binding = factory.updateVariableStatement(first, first.modifiers ?? [], factory.updateVariableDeclarationList(first.declarationList, [
-    nativeVariable(item.name, itemType, factory.createAsExpression(value, itemType))
+    nativeVariable(item.name, itemType, factory.createAsExpression(factory.createCallExpression(factory.createIdentifier("unchecked"), [], [value]), itemType))
   ]));
   let statement: ts.Statement = factory.updateForStatement(iteration, factory.updateVariableDeclarationList(initializer, [
     nativeVariable(index.name, factory.createTypeReferenceNode(signed), factory.createNumericLiteral(0))

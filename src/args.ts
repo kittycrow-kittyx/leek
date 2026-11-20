@@ -7,6 +7,7 @@ export interface Options {
   selected: Target;
   entry: string;
   validateOnly: boolean;
+  output: string | null;
 }
 
 export function options(args: readonly string[], cwd: string): Options {
@@ -22,6 +23,7 @@ export function options(args: readonly string[], cwd: string): Options {
   let entry = "src/main/boot.ts";
   let source = cwd;
   let validateOnly = false;
+  let output: string | null = null;
   for (let i = start; i < args.length; i++) {
     const arg = args[i] ?? "";
     if (arg === "--validate-only") {
@@ -30,7 +32,7 @@ export function options(args: readonly string[], cwd: string): Options {
     }
     const split = arg.indexOf("=");
     const name = split < 0 ? arg : arg.slice(0, split);
-    if (name !== "--entry" && name !== "--target" && name !== "--source") {
+    if (name !== "--entry" && name !== "--target" && name !== "--source" && name !== "--out-dir") {
       throw new Error("Unknown option: " + name);
     }
     const value = split < 0 ? (args[++i] ?? "") : arg.slice(split + 1);
@@ -45,7 +47,10 @@ export function options(args: readonly string[], cwd: string): Options {
       case "--target":
         selected = target(value);
         break;
+      case "--out-dir":
+        output = resolve(cwd, value);
+        break;
     }
   }
-  return { command, source, selected, entry, validateOnly };
+  return { command, source, selected, entry, validateOnly, output };
 }

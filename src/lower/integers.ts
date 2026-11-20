@@ -1,16 +1,18 @@
 import ts from "typescript";
+import { functionOwner } from "./function-body.ts";
 
 export const nativeWidths = { LeekNativeI32: "i32", LeekNativeU32: "u32" } as const;
 export const signed = "LeekNativeI32";
 export const unsigned = "LeekNativeU32";
-const arrays = new Set(["Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array", "Int32Array", "Uint32Array", "Float32Array", "Float64Array"]);
+export const typedArrays = ["Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array", "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array"] as const;
+const arrays = new Set<string>(typedArrays);
 const bitwise = new Set([
   ts.SyntaxKind.CaretToken, ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken,
   ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.GreaterThanGreaterThanToken,
   ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken
 ]);
 
-function librarySymbol(symbol: ts.Symbol | null): boolean {
+export function librarySymbol(symbol: ts.Symbol | null): boolean {
   return symbol !== null && (symbol.declarations ?? []).some(declaration =>
     /(?:^|[\\/])lib\.[^\\/]+\.d\.ts$/.test(declaration.getSourceFile().fileName));
 }
@@ -54,10 +56,6 @@ export function integerValue(expression: ts.Expression, checker: ts.TypeChecker,
   return type.isNumberLiteral() && Number.isInteger(type.value) && type.value >= -2147483648 && type.value <= 4294967295;
 }
 
-function enclosingFunction(node: ts.Node): ts.Node | null {
-  for (let current = node.parent; current; current = current.parent) if (ts.isFunctionLike(current)) return current;
-  return null;
-}
 
 function parentExpression(node: ts.Expression): ts.Expression {
   let current = node;
@@ -72,12 +70,12 @@ function integerInitialiser(declaration: ts.VariableDeclaration, checker: ts.Typ
   const loop = list.parent;
   if (!ts.isForOfStatement(loop) || loop.initializer !== list || (loop.awaitModifier ?? null)) return false;
   const name = arrayType(checker.getTypeAtLocation(loop.expression));
-  return name !== null && !name.startsWith("Float");
+  return name !== null && !name.startsWith("Float") && !name.startsWith("Big");
 }
 
 function integerUse(reference: ts.Identifier, declaration: ts.VariableDeclaration, checker: ts.TypeChecker): boolean {
   if (reference === declaration.name) return true;
-  if (reference.pos < declaration.pos || enclosingFunction(reference) !== enclosingFunction(declaration)) return false;
+  if (reference.pos < declaration.pos || functionOwner(reference) !== functionOwner(declaration)) return false;
   const expression = parentExpression(reference);
   const parent = expression.parent;
   if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.left === expression) {
@@ -93,7 +91,7 @@ export function integerStorage(source: ts.SourceFile, checker: ts.TypeChecker): 
   const declarations: ts.VariableDeclaration[] = [];
   const references = new Map<ts.Symbol, ts.Identifier[]>();
   const collect = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && enclosingFunction(node) &&
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && functionOwner(node) &&
         ts.isVariableDeclarationList(node.parent) && (node.parent.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) &&
         integerInitialiser(node, checker)) declarations.push(node);
     const symbol = ts.isIdentifier(node) ? checker.getSymbolAtLocation(node) ?? null : null;

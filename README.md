@@ -2,9 +2,14 @@
 
 **LEEK**: Leek Extends the Environment of KittyX.
 
-Leek is an ahead-of-time compiler for mikuOS. It extends Bake and the
-KITTYX compiler backends to compile the TypeScript userspace independently
-of the Thistle kernel.
+Leek is an ahead-of-time transpiler for canonical mikuOS. It supplies the
+language transformations missing from the pinned Bake and KITTYX backends.
+For WebAssembly, Baguette owns compilation, modular WAT emission, native
+instruction selection and deterministic binary verification.
+
+The production source is `mikuOS-thistle/src/main/boot.ts` and its transitive
+graph, including the canonical Thistle kernel and inherited ThistleASM.
+Leek stages that graph without maintaining another kernel or userspace source tree.
 
 ## Targets
 
@@ -15,9 +20,18 @@ of the Thistle kernel.
 | `rust` | Crust | Rust |
 
 Source analysis and lowering are available for all three targets. The
-WebAssembly compilation path uses the released Baguette compiler process
-until its emitter can be extended through an importable API. Userspace ABI
-and language coverage are not yet complete. Native backend validation is pending.
+WebAssembly path uses the released Baguette compiler process, including its
+mandatory Bake stage.
+
+Whole-OS emission has these unresolved requirements:
+
+| Canonical construct | Leek requirement |
+| --- | --- |
+| Catch bindings | Native exception values; Bake reports BK1002 |
+| `process`, `navigator`, `fetch` | Host capability bindings; Bake reports BK1102 |
+| Numeric array holes and indexed records | Missing-value storage; Bake reports BK3001 |
+| Promise callbacks | Native settlement and continuation support |
+| `boot(Host): Os` | Numeric host ABI and reference ownership |
 
 ## Requirements
 
@@ -37,14 +51,21 @@ The setup command installs Leek's dependencies and the pinned compiler and Bake 
 ## Use
 
 ```sh
-bun src/cli.ts analyse --source ../mikuOS --entry src/sh/lex.ts
-bun src/cli.ts lower --source ../mikuOS --target wasm --entry src/sh/lex.ts
-bun src/cli.ts wasm --source ../mikuOS --entry src/sh/lex.ts --validate-only
+bun src/cli.ts --target=wasm --source ../mikuOS-thistle --out-dir ../mikuOS-teto/build/reference
+bun src/cli.ts analyse --source ../mikuOS-thistle --entry src/sh/lex.ts
 ```
 
 The entry path is relative to the supplied mikuOS source directory. Diagnostics and
 lowered source are written to `build/`. WebAssembly output is written
-to `dist/wasm/` when compilation succeeds, with WAT under `dist/wasm/wat/`.
+to `dist/wasm/` by default when compilation succeeds, with modular WAT under
+`wat/leek/`. `--out-dir` resolves relative to the calling repository. Baguette
+also produces a reference binary, as in Teto's regeneration workflow. A separate
+build links the modular layout and compiles it through Binaryen.
+
+`build/wasm/source-manifest.json` records each original source module and its
+SHA-256 before transformation. Successful emission copies it to
+`canonical-source.json` beside the output. Bake writes lowering diagnostics to
+`build/wasm/build/baguette-bake/bake-report.json`.
 
 ## Documentation
 
