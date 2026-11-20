@@ -6,7 +6,7 @@ import type { LoweredProject } from "./index.ts";
 import { numericCall } from "./numeric.ts";
 import { arrayType, integerOperation, integerStorage, integerValue, nativeWidths, signed, unsigned, unwrap } from "./integers.ts";
 import { lowerArrayLoop } from "./loops.ts";
-import { lowerNullable } from "./nullish.ts";
+import { lowerNullable, referenceRead } from "./nullish.ts";
 import { lowerClosures } from "./closures.ts";
 
 const intrinsicFile = "__leek_wasm_intrinsics.ts";
@@ -14,6 +14,7 @@ const intrinsicFile = "__leek_wasm_intrinsics.ts";
 // Bake checks these reference contracts; Baguette omits their bodies and uses
 // its pinned native prelude and AssemblyScript standard library instead.
 export const multiplyReference = "export function LeekMulU32(left: number, right: number): number { return Math.imul(left, right) >>> 0; }\n";
+export const uncheckedReference = "export function unchecked<T>(value: T): T { return value; }\n";
 export const integerReference = `export class LeekNativeMath {
   static imul(left: number, right: number): number { return Math.imul(left, right); }
 }
@@ -31,6 +32,7 @@ export interface WasmLowering {
   usesMultiply: boolean;
   usesPredicates: boolean;
   usesCoercion: boolean;
+  usesUnchecked: boolean;
 }
 
 function labelledLoop(node: ts.Node): { loop: ts.ForOfStatement; labels: ts.Identifier[] } | null {
@@ -42,7 +44,7 @@ function labelledLoop(node: ts.Node): { loop: ts.ForOfStatement; labels: ts.Iden
 /** Bind native operations and add only the integer facts missing from the inherited compiler. */
 export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrinsicSpecifier = "./__leek_wasm_intrinsics.js"): WasmLowering {
   const storage = integerStorage(source, checker);
-  const used = { widths: false, multiply: false, predicates: false, coercion: false, changed: false };
+  const used = { widths: false, multiply: false, predicates: false, coercion: false, unchecked: false, changed: false };
   const stored = (node: ts.Node): boolean => {
     const symbol = ts.isIdentifier(node) ? checker.getSymbolAtLocation(node) ?? null : null;
     return symbol !== null && storage.has(symbol);
@@ -103,7 +105,7 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
       const iteration = labelledLoop(node);
       const array = iteration ? arrayType(checker.getTypeAtLocation(iteration.loop.expression)) : null;
       if (iteration && array) {
-        used.changed = used.widths = true;
+        used.changed = used.widths = used.unchecked = true;
         const initializer = iteration.loop.initializer;
         const binding = ts.isVariableDeclarationList(initializer) ? initializer.declarations[0] ?? null : null;
         return lowerArrayLoop({ source, loop: iteration.loop, name: array, checker, visit,
@@ -119,9 +121,9 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
     return ts.visitNode(root, visit, ts.isSourceFile) ?? root;
   }]);
   try {
-    const flags = { usesMultiply: used.multiply, usesPredicates: used.predicates, usesCoercion: used.coercion };
+    const flags = { usesMultiply: used.multiply, usesPredicates: used.predicates, usesCoercion: used.coercion, usesUnchecked: used.unchecked };
     if (!used.changed) return { text: source.text, ...flags };
-    const bindings = [...(used.multiply ? ["LeekMulU32"] : []), ...(used.predicates ? ["LeekF64"] : []), ...(used.coercion ? ["LeekNativeMath"] : [])];
+    const bindings = [...(used.multiply ? ["LeekMulU32"] : []), ...(used.predicates ? ["LeekF64"] : []), ...(used.coercion ? ["LeekNativeMath"] : []), ...(used.unchecked ? ["unchecked"] : [])];
     const reserved = new Set([...bindings, ...(used.widths ? Object.keys(nativeWidths) : [])]);
     const check = (node: ts.Node): void => {
       if (ts.isIdentifier(node) && reserved.has(node.text)) throw new Error("Leek WASM: reserved native binding " + node.text + " in " + source.fileName);
@@ -149,24 +151,35 @@ export function prepareWasmSource(input: LoweredProject): string[] {
   }
   program = ts.createProgram(parsed.fileNames, parsed.options);
   const originalChecker = program.getTypeChecker();
-  for (const file of stagedFiles(program, root)) {
-    const output = lowerNullable(file, originalChecker);
-    if (output !== file.text) writeFileSync(file.fileName, output);
-  }
-  program = ts.createProgram(parsed.fileNames, parsed.options);
-  const checker = program.getTypeChecker();
   const intrinsic = resolve(root, intrinsicFile);
   const references = new Set<string>();
   for (const file of stagedFiles(program, root)) {
+    const modulePath = relative(dirname(file.fileName), intrinsic).split(sep).join("/").replace(/\.ts$/, ".js");
+    const output = lowerNullable(file, originalChecker, modulePath.startsWith(".") ? modulePath : "./" + modulePath);
+    if (output.usesReferenceRead) references.add(referenceRead);
+    if (output.text !== file.text) writeFileSync(file.fileName, output.text);
+  }
+  const referenceModuleWritten = references.size > 0;
+  if (referenceModuleWritten) writeFileSync(intrinsic, [...references].join(""), { flag: "wx" });
+  program = ts.createProgram(parsed.fileNames, parsed.options);
+  const nullableChecker = program.getTypeChecker();
+  for (const file of stagedFiles(program, root).filter(file => file.fileName !== intrinsic)) {
+    const output = lowerNullable(file, nullableChecker);
+    if (output.text !== file.text) writeFileSync(file.fileName, output.text);
+  }
+  program = ts.createProgram(parsed.fileNames, parsed.options);
+  const checker = program.getTypeChecker();
+  for (const file of stagedFiles(program, root).filter(file => file.fileName !== intrinsic)) {
     const modulePath = relative(dirname(file.fileName), intrinsic).split(sep).join("/").replace(/\.ts$/, ".js");
     const output = lowerWasm(file, checker, modulePath.startsWith(".") ? modulePath : "./" + modulePath);
     if (output.usesMultiply) references.add(multiplyReference);
     if (output.usesPredicates) references.add(floatReference);
     if (output.usesCoercion) references.add(integerReference);
+    if (output.usesUnchecked) references.add(uncheckedReference);
     if (output.text !== file.text) writeFileSync(file.fileName, output.text);
   }
   if (!references.size) return [];
-  writeFileSync(intrinsic, [...references].join(""), { flag: "wx" });
+  writeFileSync(intrinsic, [...references].join(""), { flag: referenceModuleWritten ? "w" : "wx" });
   return [intrinsic];
 }
 
@@ -185,6 +198,7 @@ export function wasmPrelude(compiler: string, work: string): string {
   const inherited = readFileSync(resolve(compiler, "prelude/teto-baseline.ts"), "utf8");
   writeFileSync(path, inherited + '\nimport { F64 as LeekF64 } from "~lib/number";\n' +
     'import { NativeMath as LeekNativeMath } from "~lib/math";\n' +
+    '@inline function LeekReferenceAt<T>(values: Array<T>, index: i32): T | null { return unchecked(values[index]); }\n' +
     '@inline function LeekMulU32(left: u32, right: u32): u32 { return mulU32(left, right); }\n');
   return path;
 }

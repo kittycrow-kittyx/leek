@@ -2,7 +2,7 @@ import ts from "typescript";
 import { nativeVariable } from "../../baguette/src/ast.ts";
 import { lowerSourceFile } from "../../baguette/bake/src/lower.ts";
 import { createBakeCoreEngine } from "../../baguette/bake/src/core-engine.ts";
-import { librarySymbol, unwrap } from "./integers.ts";
+import { arrayType, librarySymbol, unwrap } from "./integers.ts";
 import { identifiers } from "./names.ts";
 
 interface MapLookup {
@@ -10,6 +10,25 @@ interface MapLookup {
   key: ts.Expression;
   receiverType: ts.TypeNode;
   keyType: ts.TypeNode;
+}
+
+export interface NullableLowering {
+  text: string;
+  usesReferenceRead: boolean;
+}
+
+export const referenceRead = "export function LeekReferenceAt<T>(values: readonly T[], index: number): T | null { const value: T | undefined = values[index]; return value === undefined ? null : value; }\n";
+export const nullableAliases = { LeekArrayIndex: "i32" } as const;
+
+function indexedKind(receiver: ts.Expression, checker: ts.TypeChecker): "string" | "typed" | "reference" | null {
+  const type = checker.getTypeAtLocation(receiver);
+  if (type.flags & ts.TypeFlags.StringLike) return "string";
+  if (arrayType(type)) return "typed";
+  if (!checker.isArrayType(type) && !checker.isTupleType(type)) return null;
+  const element = checker.getIndexTypeOfType(type, ts.IndexKind.Number) ?? null;
+  const reference = (value: ts.Type): boolean => value.isUnion() ? value.types.every(reference) :
+    Boolean(value.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.Object | ts.TypeFlags.Null));
+  return element && reference(element) ? "reference" : null;
 }
 
 function mapLookup(expression: ts.Expression, checker: ts.TypeChecker): MapLookup | null {
@@ -75,16 +94,22 @@ function bakeNullable(source: ts.SourceFile, checker: ts.TypeChecker, cache: ts.
 }
 
 /** Extend Bake only for effectful, explicitly nullable operands. Undefined retains its distinct semantics. */
-export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker): string {
+export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, intrinsicSpecifier = "./__leek_wasm_intrinsics.js"): NullableLowering {
   const names = identifiers(source);
   let serial = 0;
   let changed = false;
+  const used: { readName: ts.Identifier | null; indexName: ts.Identifier | null } = { readName: null, indexName: null };
   const scopes: ts.VariableDeclaration[][] = [];
   const result = ts.transform(source, [context => root => {
     const factory = context.factory;
     const fresh = (): ts.Identifier => {
       let name: string;
       do { name = "__leekNullable" + serial++; } while (names.has(name));
+      names.add(name);
+      return factory.createIdentifier(name);
+    };
+    const reserve = (name: string): ts.Identifier => {
+      if (names.has(name)) throw new Error("Leek WASM: reserved indexed binding " + name + " in " + source.fileName);
       names.add(name);
       return factory.createIdentifier(name);
     };
@@ -116,6 +141,37 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker): s
       }
       const lookup = mapLookup(node.left, checker);
       const resultType = checker.typeToTypeNode(checker.getTypeAtLocation(node), node, ts.NodeBuilderFlags.NoTruncation) ?? null;
+      const indexed = unwrap(node.left);
+      const kind = ts.isElementAccessExpression(indexed) && !(indexed.questionDotToken ?? null) ? indexedKind(indexed.expression, checker) : null;
+      const index = ts.isElementAccessExpression(indexed) ? indexed.argumentExpression ?? null : null;
+      const numericIndex = index ? checker.getTypeAtLocation(index) : null;
+      const typed = ts.isElementAccessExpression(indexed) ? arrayType(checker.getTypeAtLocation(indexed.expression)) : null;
+      const receiverType = typed ? factory.createTypeReferenceNode(typed) : ts.isElementAccessExpression(indexed) ? checker.typeToTypeNode(checker.getTypeAtLocation(indexed.expression), indexed, ts.NodeBuilderFlags.NoTruncation) ?? null : null;
+      const elementType = checker.typeToTypeNode(checker.getNonNullableType(checker.getTypeAtLocation(node.left)), node, ts.NodeBuilderFlags.NoTruncation) ?? null;
+      const fallbackType = checker.typeToTypeNode(checker.getTypeAtLocation(node.right), node, ts.NodeBuilderFlags.NoTruncation) ?? null;
+      if (kind && numericIndex && numericIndex.flags & ts.TypeFlags.NumberLike && receiverType && elementType && fallbackType && ts.isElementAccessExpression(indexed) && index) {
+        const receiver = fresh();
+        const at = fresh();
+        scope.push(nativeVariable(receiver, receiverType, null), nativeVariable(at, factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword), null));
+        const integral = factory.createBinaryExpression(factory.createBinaryExpression(at, ts.SyntaxKind.PercentToken, factory.createNumericLiteral(1)), ts.SyntaxKind.EqualsEqualsEqualsToken, factory.createNumericLiteral(0));
+        const bounds = factory.createBinaryExpression(factory.createBinaryExpression(at, ts.SyntaxKind.GreaterThanEqualsToken, factory.createNumericLiteral(0)), ts.SyntaxKind.AmpersandAmpersandToken,
+          factory.createBinaryExpression(at, ts.SyntaxKind.LessThanToken, factory.createPropertyAccessExpression(receiver, "length")));
+        const valid = factory.createBinaryExpression(bounds, ts.SyntaxKind.AmpersandAmpersandToken, integral);
+        used.indexName ??= reserve("LeekArrayIndex");
+        const nativeIndex = factory.createParenthesizedExpression(factory.createAsExpression(at, factory.createTypeReferenceNode(used.indexName)));
+        used.readName = kind === "reference" ? used.readName ?? reserve("LeekReferenceAt") : used.readName;
+        const value = kind === "string" ? factory.createCallExpression(factory.createPropertyAccessExpression(receiver, "charAt"), [], [nativeIndex]) :
+          kind === "reference" && used.readName ? factory.createCallExpression(used.readName, [], [receiver, nativeIndex]) : factory.createNonNullExpression(factory.createElementAccessExpression(receiver, nativeIndex));
+        const fallback = ts.visitNode(node.right, visit, ts.isExpression) ?? node.right;
+        const selection = kind === "reference" ? factory.createBinaryExpression(factory.createConditionalExpression(valid, factory.createToken(ts.SyntaxKind.QuestionToken), value,
+          factory.createToken(ts.SyntaxKind.ColonToken), factory.createNull()), ts.SyntaxKind.QuestionQuestionToken, fallback) :
+          factory.createConditionalExpression(valid, factory.createToken(ts.SyntaxKind.QuestionToken), value, factory.createToken(ts.SyntaxKind.ColonToken), fallback);
+        changed = true;
+        return factory.createSatisfiesExpression(factory.createParenthesizedExpression(factory.createCommaListExpression([
+          factory.createAssignment(receiver, ts.visitNode(indexed.expression, visit, ts.isExpression) ?? indexed.expression),
+          factory.createAssignment(at, ts.visitNode(index, visit, ts.isExpression) ?? index), selection
+        ])), factory.createUnionTypeNode([elementType, fallbackType]));
+      }
       if (lookup && resultType) {
         const map = fresh();
         const key = fresh();
@@ -161,6 +217,10 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker): s
     };
     return ts.visitNode(root, visit, ts.isSourceFile) ?? root;
   }]);
-  try { return changed ? ts.createPrinter({ newLine: ts.NewLineKind.LineFeed }).printFile(result.transformed[0] ?? source) : source.text; }
+  try {
+    const imports = used.readName ? "import { LeekReferenceAt } from " + JSON.stringify(intrinsicSpecifier) + ";\n" : "";
+    const aliases = used.indexName ? "type LeekArrayIndex = number;\n" : "";
+    return { text: changed ? imports + aliases + ts.createPrinter({ newLine: ts.NewLineKind.LineFeed }).printFile(result.transformed[0] ?? source) : source.text, usesReferenceRead: used.readName !== null };
+  }
   finally { result.dispose(); }
 }

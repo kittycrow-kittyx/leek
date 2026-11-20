@@ -51,7 +51,7 @@ export function lowerArrayLoop(input: ArrayLoop): ts.Block {
     nativeVariable(array.name, factory.createTypeReferenceNode(name), ts.visitNode(loop.expression, visit, ts.isExpression) ?? loop.expression)
   ]));
   const binding = factory.updateVariableStatement(first, first.modifiers ?? [], factory.updateVariableDeclarationList(first.declarationList, [
-    nativeVariable(item.name, itemType, factory.createAsExpression(value, itemType))
+    nativeVariable(item.name, itemType, factory.createAsExpression(factory.createCallExpression(factory.createIdentifier("unchecked"), [], [value]), itemType))
   ]));
   let statement: ts.Statement = factory.updateForStatement(iteration, factory.updateVariableDeclarationList(initializer, [
     nativeVariable(index.name, factory.createTypeReferenceNode(signed), factory.createNumericLiteral(0))

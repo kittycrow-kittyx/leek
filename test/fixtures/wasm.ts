@@ -100,3 +100,34 @@ export function mapReferenceDefault(present: number, value: number): number {
   const item = map.get("key") ?? null;
   return item === null ? -7 : item.value;
 }
+
+export function indexedByte(index: number): number {
+  const values: Uint8Array = new Uint8Array(3);
+  values[0] = 0; values[1] = 128; values[2] = 255;
+  return values[index] ?? -7;
+}
+
+export function indexedString(index: number): number {
+  const value = "A😀Z"[index] ?? "?";
+  return value.charCodeAt(0);
+}
+
+export function indexedReference(index: number): number {
+  const values: string[] = new Array<string>(3);
+  values[0] = ""; values[2] = "last";
+  const value = values[index] ?? "missing";
+  return value.length;
+}
+
+export function indexedObject(index: number): number {
+  const values: MapValue[] = new Array<MapValue>(3);
+  values[0] = new MapValue(0); values[2] = new MapValue(42);
+  const value = values[index] ?? null;
+  return value === null ? -7 : value.value;
+}
+
+export function indexedReadonly(index: number): number {
+  const values: readonly string[] = ["zero", "one"];
+  const value = values[index] ?? "?";
+  return value.length;
+}

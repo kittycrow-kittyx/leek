@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
-import { lowerNullable } from "../src/lower/nullish.ts";
+import { lowerNullable, referenceRead } from "../src/lower/nullish.ts";
 
 function check(input: string, transform = true): string {
   const root = mkdtempSync(join(tmpdir(), "leek-nullable-"));
@@ -16,7 +16,8 @@ function check(input: string, transform = true): string {
     const program = ts.createProgram([file], options);
     const source = program.getSourceFile(file) ?? null;
     assert.ok(source);
-    const lowered = transform ? lowerNullable(source, program.getTypeChecker()) : input;
+    const lowered = transform ? lowerNullable(source, program.getTypeChecker()).text : input;
+    writeFileSync(join(root, "__leek_wasm_intrinsics.ts"), referenceRead);
     writeFileSync(file, lowered);
     const diagnostics = ts.getPreEmitDiagnostics(ts.createProgram([file], options));
     assert.deepEqual(diagnostics.map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")), []);
@@ -64,7 +65,7 @@ console.log(get() ?? "fallback", unresolved(() => undefined, "ok"));`;
     const program = ts.createProgram([file], { strict: true, types: [], target: ts.ScriptTarget.ES2022 });
     const input = program.getSourceFile(file) ?? null;
     assert.ok(input);
-    assert.equal(lowerNullable(input, program.getTypeChecker()), readFileSync(file, "utf8"));
+    assert.equal(lowerNullable(input, program.getTypeChecker()).text, readFileSync(file, "utf8"));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -108,4 +109,24 @@ console.log(lookup("present"), lookup("absent"));`;
 function run(): number { return map.get("key") ?? 7; }
 console.log(run());`;
   assert.equal(check(stored), check(stored, false));
+});
+
+test("indexed defaults retain bounds, holes, UTF-16 units and evaluation order", () => {
+  const source = `export {};
+const events: string[] = [];
+const strings = new Array<string>(3); strings[0] = ""; strings[2] = "last";
+const bytes = new Uint8Array([0, 128, 255]);
+function receiver(): string[] { events.push("receiver"); return strings; }
+function key(value: number): number { events.push("key"); return value; }
+function fallback(): string { events.push("fallback"); return "missing"; }
+function run(index: number): object {
+  return [receiver()[key(index)] ?? fallback(), bytes[key(index)] ?? -7, "A😀Z"[key(index)] ?? "missing"];
+}
+console.log(JSON.stringify([[-1, -0, 0, 0.5, 1, 2, 3, 4, NaN, Infinity, 4294967296].map(run), events]));`;
+  assert.equal(check(source), check(source, false));
+});
+
+test("indexed native bindings reject source name collisions", () => {
+  assert.throws(() => check('type LeekArrayIndex = string; function run(i: number): number { return new Uint8Array(1)[i] ?? 7; }'), /reserved indexed binding LeekArrayIndex/);
+  assert.throws(() => check('function LeekReferenceAt(): void {} function run(i: number): string { return ["value"][i] ?? "missing"; }'), /reserved indexed binding LeekReferenceAt/);
 });

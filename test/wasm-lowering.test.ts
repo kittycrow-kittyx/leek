@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
-import { floatReference, integerReference, lowerWasm, multiplyReference } from "../src/lower/wasm.ts";
+import { floatReference, integerReference, lowerWasm, multiplyReference, uncheckedReference } from "../src/lower/wasm.ts";
 
 function lowered(text: string, ambient = ""): string {
   const root = mkdtempSync(join(tmpdir(), "leek-wasm-"));
@@ -29,7 +29,7 @@ function execute(text: string, expression: string): string {
   const root = mkdtempSync(join(tmpdir(), "leek-wasm-reference-"));
   try {
     const file = join(root, "source.ts");
-    writeFileSync(join(root, "__leek_wasm_intrinsics.ts"), multiplyReference + floatReference + integerReference);
+    writeFileSync(join(root, "__leek_wasm_intrinsics.ts"), multiplyReference + floatReference + integerReference + uncheckedReference);
     writeFileSync(file, text + "\nconsole.log(JSON.stringify(" + expression + "));");
     return execFileSync(process.execPath, [file], { encoding: "utf8" }).trim();
   } finally { rmSync(root, { recursive: true, force: true }); }

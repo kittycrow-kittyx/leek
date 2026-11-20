@@ -8,6 +8,7 @@ import type { WatLayout } from "../baguette/src/wat-modules.ts";
 import { prepareWasmAbi } from "./wasm-abi.ts";
 import { prepareWasmSource, wasmPrelude } from "./lower/wasm.ts";
 import { nativeWidths } from "./lower/integers.ts";
+import { nullableAliases } from "./lower/nullish.ts";
 
 const sourceManifest: (text: string) => SourceManifest = JSON.parse;
 const watLayout: (text: string) => WatLayout = JSON.parse;
@@ -24,7 +25,7 @@ export function emitWasm(compiler: string, input: LoweredProject, outputDir: str
     ...abi,
     intrinsicModules,
     ...(intrinsicModules.length ? { preludeFile: wasmPrelude(compiler, dirname(input.project)) } : {}),
-    typeAliases: { ...abi.typeAliases, ...nativeWidths },
+    typeAliases: { ...abi.typeAliases, ...nativeWidths, ...nullableAliases },
     generatedDir: resolve(outputDir, "wat"),
     outDir: outputDir,
     moduleBaseName: "leek",

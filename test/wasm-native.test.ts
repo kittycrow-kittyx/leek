@@ -50,6 +50,8 @@ function checkNumbers(exports: WebAssembly.Exports): void {
   for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "mapDefault", present, value), reference.mapDefault(present, value));
   for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "mapReferenceDefault", present, value), reference.mapReferenceDefault(present, value));
   for (const value of [0, 1]) assert.equal(call(exports, "nullableEffect", value), reference.nullableEffect(value));
+  const indexed = { indexedByte: reference.indexedByte, indexedString: reference.indexedString, indexedReference: reference.indexedReference, indexedObject: reference.indexedObject, indexedReadonly: reference.indexedReadonly };
+  for (const [name, operation] of Object.entries(indexed)) for (const value of [...values, 0, 0.5, 1, 2, 3, 4]) assert.equal(call(exports, name, value), operation(value), `${name}(${value})`);
   for (const [name, expected] of [["signedRead", -1], ["widerWrite", 1], ["assignmentResult", 0]] as const) assert.equal(call(exports, name), expected);
 }
 

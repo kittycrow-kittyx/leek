@@ -10,4 +10,6 @@ The [typed-array adapter](loops.md) supplies Bake's missing built-in array recog
 
 Numeric predicates on typed Number operands use the existing `F64.isNaN`, `F64.isFinite`, `F64.isInteger` and `F64.isSafeInteger` primitives in Baguette’s pinned AssemblyScript. The intrinsic reference is checked by Bake and omitted from native emission. Local Number declarations are not rewritten.
 
+`uncheckedReference` supplies the checking-only identity signature for AssemblyScript's `unchecked` builtin. `WasmLowering.usesUnchecked` records its use in typed-array loops whose generated condition checks each element's index before reading it.
+
 `wasmPrelude(compiler, work)` stages the pinned baseline prelude and aliases AssemblyScript's existing F64 and NativeMath exports. Its inline LeekMulU32 adapter calls Baguette's mulU32 without supplying another multiplication implementation. Instruction tests require the hot loop to retain native integer loads, XOR and multiplication.
