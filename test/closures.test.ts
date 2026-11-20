@@ -114,6 +114,15 @@ test("different receivers and shadowed class generics retain their original clos
   ]) assert.equal(transform(source, false).text, source);
 });
 
+test("captures requiring missing-value or nullable primitive storage retain their closure", () => {
+  for (const source of [
+    'export {}; class C { run(): Promise<number | undefined> { let value: number | undefined = undefined; const fn = async (): Promise<number | undefined> => value; value = 2; return fn(); } }',
+    'export {}; class C { run(): Promise<number | null> { let value: number | null = null; const fn = async (): Promise<number | null> => value; value = 2; return fn(); } }',
+    'export {}; class C { run(): Promise<number> { const fn = async (value?: number): Promise<number> => value ?? 0; return fn(); } }',
+    'export {}; class C { run(): Promise<number | null> { const fn = async (): Promise<number | null> => null; return fn(); } }'
+  ]) assert.equal(transform(source, false).text, source);
+});
+
 test("Promise handlers retain fulfilment, rejection and microtask ordering", () => {
   const source = `export {};
 const events: string[] = [];

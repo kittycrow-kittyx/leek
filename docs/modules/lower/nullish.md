@@ -8,6 +8,8 @@ Literals, construction and standard Number or Math calls can omit unreachable fa
 
 Indexed defaults on strings and typed arrays capture the receiver and numeric index, check bounds and integrality, then select the native element or fallback. String access uses UTF-16 code units. Reference arrays use `referenceRead` as their checking contract and the existing AssemblyScript `unchecked` operation after the bounds check. Native reference holes become null at this coalescing boundary. Numeric arrays with holes retain their source expression because zero cannot represent an absent Number element.
 
+Typed-array index lowering accepts Number fallbacks. The source `values[index] ?? null` retains its original form pending optional primitive storage.
+
 `nullableAliases` maps the checked `LeekArrayIndex` cast to native i32 after the bounds and integrality checks. Generated indexed bindings reject collisions with existing source identifiers.
 
 | Checking type | Native type |

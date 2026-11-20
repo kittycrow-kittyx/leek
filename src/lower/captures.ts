@@ -108,6 +108,12 @@ function parameterWritten(owner: ts.MethodDeclaration, symbol: ts.Symbol, checke
   return written;
 }
 
+function absentCapture(type: ts.Type): boolean {
+  const parts = type.isUnion() ? type.types : [type];
+  return parts.some(part => Boolean(part.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Undefined | ts.TypeFlags.Void))) ||
+    parts.some(part => Boolean(part.flags & ts.TypeFlags.Null)) && parts.some(part => Boolean(part.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.BigIntLike | ts.TypeFlags.BooleanLike)));
+}
+
 function capturesOf(arrow: ts.ArrowFunction, owner: ts.MethodDeclaration, self: ts.Symbol | null, checker: ts.TypeChecker): CapturedVariable[] | null {
   const captures = new Map<ts.Symbol, CapturedVariable>();
   let eligible = true;
@@ -127,7 +133,7 @@ function capturesOf(arrow: ts.ArrowFunction, owner: ts.MethodDeclaration, self: 
     const dominates = parameter ? declaration.parent === owner : Boolean(binding && ts.isVariableStatement(binding) && binding.parent === body && binding.end < arrow.pos);
     const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
     const annotation = checker.typeToTypeNode(type, arrow, ts.NodeBuilderFlags.NoTruncation) ?? null;
-    const unsupported = Boolean(type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) || type.getCallSignatures().length > 0;
+    const unsupported = absentCapture(type) || type.getCallSignatures().length > 0;
     const initializer = ts.isVariableDeclaration(declaration) ? declaration.initializer ?? null : null;
     if (!dominates || !annotation || unsupported || mutable && (!ts.isVariableDeclaration(declaration) || !initializer)) { eligible = false; return; }
     captures.set(symbol, { symbol, name: declaration.name, declaration, type: annotation, mutable });
@@ -160,8 +166,10 @@ function unitFor(node: ts.ArrowFunction, source: ts.SourceFile, checker: ts.Type
   const calls = callback ? [] : directCalls(source, node, variable, owner, checker);
   const symbol = variable ? checker.getSymbolAtLocation(variable.name) ?? null : null;
   const captures = capturesOf(node, owner, symbol, checker);
-  const nativeParameters = node.parameters.every(parameter => !(checker.getTypeAtLocation(parameter.name).flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)));
-  return returns && calls && captures && nativeParameters ? { arrow: node, owner, klass, variable, symbol, calls, captures, returns, callback } : null;
+  const nativeParameters = node.parameters.every(parameter => !absentCapture(checker.getTypeAtLocation(parameter.name)));
+  const value = signature ? checker.getAwaitedType(signature.getReturnType()) ?? null : null;
+  const nativeResult = value !== null && (Boolean(value.flags & ts.TypeFlags.Void) || !absentCapture(value));
+  return returns && calls && captures && nativeParameters && nativeResult ? { arrow: node, owner, klass, variable, symbol, calls, captures, returns, callback } : null;
 }
 
 /** Discover non-escaping local async calls whose captures can be represented by native parameters and cells. */

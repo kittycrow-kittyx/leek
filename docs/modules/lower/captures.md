@@ -5,3 +5,5 @@
 The analysis checks every reference to a local function before lifting it. Function values returned or passed to another function retain their original form. Captured bindings must be initialised before the arrow. A mutable local needs a simple initialiser; written parameters, unresolved types, local callable captures and generic owning methods await further lowering. Declaration ranges are compared only within the same source file.
 
 Calls must retain the owning method's receiver. References inside a nested ordinary function or class retain their original form. Generic arrows that shadow a class type parameter also retain their source form.
+
+Closure lifting accepts void results and native value types. Captures, parameters or results containing undefined or nullable primitives retain their closures pending optional storage.

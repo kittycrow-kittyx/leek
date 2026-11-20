@@ -148,8 +148,11 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
       const typed = ts.isElementAccessExpression(indexed) ? arrayType(checker.getTypeAtLocation(indexed.expression)) : null;
       const receiverType = typed ? factory.createTypeReferenceNode(typed) : ts.isElementAccessExpression(indexed) ? checker.typeToTypeNode(checker.getTypeAtLocation(indexed.expression), indexed, ts.NodeBuilderFlags.NoTruncation) ?? null : null;
       const elementType = checker.typeToTypeNode(checker.getNonNullableType(checker.getTypeAtLocation(node.left)), node, ts.NodeBuilderFlags.NoTruncation) ?? null;
-      const fallbackType = checker.typeToTypeNode(checker.getTypeAtLocation(node.right), node, ts.NodeBuilderFlags.NoTruncation) ?? null;
-      if (kind && numericIndex && numericIndex.flags & ts.TypeFlags.NumberLike && receiverType && elementType && fallbackType && ts.isElementAccessExpression(indexed) && index) {
+      const fallbackValue = checker.getTypeAtLocation(node.right);
+      const fallbackType = checker.typeToTypeNode(fallbackValue, node, ts.NodeBuilderFlags.NoTruncation) ?? null;
+      const fallbackParts = fallbackValue.isUnion() ? fallbackValue.types : [fallbackValue];
+      const nativeNumber = fallbackParts.every(part => Boolean(part.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.Never)));
+      if (kind && (kind !== "typed" || nativeNumber) && numericIndex && numericIndex.flags & ts.TypeFlags.NumberLike && receiverType && elementType && fallbackType && ts.isElementAccessExpression(indexed) && index) {
         const receiver = fresh();
         const at = fresh();
         scope.push(nativeVariable(receiver, receiverType, null), nativeVariable(at, factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword), null));

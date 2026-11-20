@@ -130,3 +130,16 @@ test("indexed native bindings reject source name collisions", () => {
   assert.throws(() => check('type LeekArrayIndex = string; function run(i: number): number { return new Uint8Array(1)[i] ?? 7; }'), /reserved indexed binding LeekArrayIndex/);
   assert.throws(() => check('function LeekReferenceAt(): void {} function run(i: number): string { return ["value"][i] ?? "missing"; }'), /reserved indexed binding LeekReferenceAt/);
 });
+
+test("typed-array defaults requiring optional primitive storage retain their source form", () => {
+  const source = 'function run(values: Uint8Array, index: number): number | null { return values[index] ?? null; }';
+  const root = mkdtempSync(join(tmpdir(), "leek-nullable-number-"));
+  try {
+    const file = join(root, "entry.ts");
+    writeFileSync(file, source);
+    const program = ts.createProgram([file], { strict: true, noUncheckedIndexedAccess: true, types: [], target: ts.ScriptTarget.ES2022 });
+    const input = program.getSourceFile(file) ?? null;
+    assert.ok(input);
+    assert.equal(lowerNullable(input, program.getTypeChecker()).text, source);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
