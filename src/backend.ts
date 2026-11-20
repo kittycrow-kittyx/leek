@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { requireBake, requirePin, type Target } from "./project.ts";
 import type { LoweredProject } from "./lower/index.ts";
+import { prepareWasmSource } from "./lower/wasm.ts";
 import { emitWasm } from "./wasm.ts";
 
 const compilers = { wasm: "baguette", clang: "croissant", rust: "crust" } as const;
@@ -24,6 +25,7 @@ export async function build(req: Request): Promise<void> {
     emitWasm(compiler, input, req.output);
     return;
   }
+  if (selected === "wasm") prepareWasmSource(input);
   const { bake, printBakeResult } = await compilerBake(selected);
   const lowered = resolve(work, "lowered");
   const result = bake({

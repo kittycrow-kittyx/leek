@@ -1,6 +1,6 @@
 # Nullable predicate application
 
-`nullableApplication(node, checker)` recognises a coalescing expression whose result is consumed only as a condition. It returns a `NullableApplication` containing the captured input, its type, the expression callback and its parameter symbol, or null if the transformation is not proven safe.
+`nullableApplication(node, checker)` recognises nullable Boolean predicates in conditions and negations. The `NullableApplication` keeps the callback parameter’s checker symbol so substitution preserves other bindings with the same name. Unsupported expressions return null.
 
 The helper implementation must do exactly two things: return null for a strictly null input, then invoke the supplied callback once with that input. The pass checks symbols and the original body rather than a function name. Generator and async helpers, rebound functions, effectful helper bodies, callback parameter writes, nested functions, dynamic evaluation and local type scopes retain their original source.
 
