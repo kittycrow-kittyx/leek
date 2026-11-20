@@ -11,7 +11,7 @@ test("explicit byte-array arguments activate the managed byte ABI", () => {
     mkdirSync(join(root, "source"));
     const entry = join(root, "source", "entry.ts");
     writeFileSync(entry, "export function check(bytes: Uint8Array): number { return bytes.length; }");
-    const result = prepareWasmAbi({ project: join(root, "tsconfig.json"), entry, files: 1 });
+    const result = prepareWasmAbi({ project: join(root, "tsconfig.json"), entry });
     assert.equal(result.entries.length, 2);
     assert.deepEqual(result.abiTypes, { Uint8Array: "number", LeekByteIndex: "number", LeekByteValue: "number", LeekBytePointer: "number" });
     assert.deepEqual(result.typeAliases, { LeekByteIndex: "i32", LeekByteValue: "u8", LeekBytePointer: "u32" });
@@ -26,7 +26,7 @@ test("scalar entry does not activate the byte ABI", () => {
   try {
     const entry = join(root, "entry.ts");
     writeFileSync(entry, "export function add(a: number, b: number): number { return a + b; }");
-    const result = prepareWasmAbi({ project: join(root, "tsconfig.json"), entry, files: 1 });
+    const result = prepareWasmAbi({ project: join(root, "tsconfig.json"), entry });
     assert.deepEqual(result, { entries: [entry], typeAliases: {}, abiTypes: {} });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -58,7 +58,7 @@ function needsByteBridge(entry: string): boolean {
 }
 
 /** Supply target-specific ABI extensions without changing mikuOS or its upstream compiler. */
-export function prepareWasmAbi(input: LoweredProject): WasmAbi {
+export function prepareWasmAbi(input: Pick<LoweredProject, "project" | "entry">): WasmAbi {
   if (!needsByteBridge(input.entry)) return { entries: [input.entry], typeAliases: {}, abiTypes: {} };
   const bridge = resolve(dirname(input.project), "source", "__leek_byte_abi.ts");
   const declaration = resolve(dirname(bridge), "__leek_byte_abi.d.ts");
