@@ -11,6 +11,7 @@ export interface CapturedVariable {
 }
 
 export interface ClosureUnit {
+  async: boolean;
   arrow: ts.ArrowFunction;
   owner: ts.MethodDeclaration;
   klass: ts.ClassDeclaration;
@@ -148,7 +149,7 @@ function capturesOf(arrow: ts.ArrowFunction, owner: ts.MethodDeclaration, self: 
 }
 
 function unitFor(node: ts.ArrowFunction, source: ts.SourceFile, checker: ts.TypeChecker): ClosureUnit | null {
-  if (!(node.modifiers ?? []).some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)) return null;
+  const async = (node.modifiers ?? []).some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
   const owner = methodOwner(node);
   if (!owner || !ts.isClassDeclaration(owner.parent)) return null;
   const klass = owner.parent;
@@ -162,17 +163,17 @@ function unitFor(node: ts.ArrowFunction, source: ts.SourceFile, checker: ts.Type
   if (variable && (!list || list.declarations.length !== 1 || !ts.isVariableStatement(list.parent))) return null;
   const signature = checker.getSignatureFromDeclaration(node) ?? null;
   const returns = signature ? checker.typeToTypeNode(signature.getReturnType(), node, ts.NodeBuilderFlags.NoTruncation) ?? null : null;
-  const callback = !variable && promiseCallback(node, checker);
+  const callback = async && !variable && promiseCallback(node, checker);
   const calls = callback ? [] : directCalls(source, node, variable, owner, checker);
   const symbol = variable ? checker.getSymbolAtLocation(variable.name) ?? null : null;
   const captures = capturesOf(node, owner, symbol, checker);
   const nativeParameters = node.parameters.every(parameter => !absentCapture(checker.getTypeAtLocation(parameter.name)));
   const value = signature ? checker.getAwaitedType(signature.getReturnType()) ?? null : null;
   const nativeResult = value !== null && (Boolean(value.flags & ts.TypeFlags.Void) || !absentCapture(value));
-  return returns && calls && captures && nativeParameters && nativeResult ? { arrow: node, owner, klass, variable, symbol, calls, captures, returns, callback } : null;
+  return returns && calls && captures && nativeParameters && nativeResult ? { async, arrow: node, owner, klass, variable, symbol, calls, captures, returns, callback } : null;
 }
 
-/** Discover non-escaping local async calls whose captures can be represented by native parameters and cells. */
+/** Discover non-escaping local calls whose captures can be represented by native parameters and cells. */
 export function closureUnits(source: ts.SourceFile, checker: ts.TypeChecker): ClosureUnit[] {
   const units: ClosureUnit[] = [];
   const scan = (node: ts.Node): void => {

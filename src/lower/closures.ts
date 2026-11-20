@@ -29,7 +29,7 @@ function closureBindings(source: ts.SourceFile, units: ClosureUnit[]) {
   for (const unit of units) for (const capture of unit.captures) {
     if (capture.mutable && !cells.has(capture.symbol)) cells.set(capture.symbol, { capture, name: fresh("cell") });
   }
-  const helperNames = new Map(units.map(unit => [unit, fresh("async")]));
+  const helperNames = new Map(units.map(unit => [unit, fresh(unit.async ? "async" : "local")]));
   const callUnits = new Map<ts.CallExpression, ClosureUnit>();
   const callbackUnits = new Map(units.filter(unit => unit.callback).map(unit => [unit.arrow, unit]));
   const removed = new Set<ts.Statement>();
@@ -96,7 +96,7 @@ export function lowerClosures(source: ts.SourceFile, checker: ts.TypeChecker): s
       }
       const unit = ts.isCallExpression(node) ? callUnits.get(node) ?? null : null;
       if (unit && ts.isCallExpression(node)) {
-        const name = required(helperNames.get(unit) ?? null, "lifted async method");
+        const name = required(helperNames.get(unit) ?? null, "lifted local method");
         const arguments_ = node.arguments.map(argument => ts.visitNode(argument, visit, ts.isExpression) ?? argument);
         return factory.createCallExpression(factory.createPropertyAccessExpression(factory.createThis(), name), node.typeArguments ?? [],
           [...unit.captures.map(captureArgument), ...arguments_]);
@@ -128,18 +128,18 @@ export function lowerClosures(source: ts.SourceFile, checker: ts.TypeChecker): s
       current = unit;
       const name = helperNames.get(unit) ?? null;
       const parameters = captureNames.get(unit) ?? null;
-      if (!name || !parameters) throw new Error("Missing async capture parameters");
+      if (!name || !parameters) throw new Error("Missing capture parameters");
       const body = ts.isBlock(unit.arrow.body) ? unit.arrow.body : factory.createBlock([factory.createReturnStatement(unit.arrow.body)], true);
       const captures = unit.captures.map(capture => {
         const parameter = parameters.get(capture.symbol) ?? null;
-        if (!parameter) throw new Error("Missing async capture binding");
+        if (!parameter) throw new Error("Missing capture binding");
         return nativeParameter(parameter, capture.mutable ? factory.createTypeReferenceNode(cellClass, [capture.type]) : capture.type);
       });
-      const helper = nativeMethod({ name: factory.createIdentifier(name), modifiers: [factory.createModifier(ts.SyntaxKind.PrivateKeyword), factory.createModifier(ts.SyntaxKind.AsyncKeyword)],
+      const helper = nativeMethod({ name: factory.createIdentifier(name), modifiers: [factory.createModifier(ts.SyntaxKind.PrivateKeyword), ...(unit.async ? [factory.createModifier(ts.SyntaxKind.AsyncKeyword)] : [])],
         typeParameters: unit.arrow.typeParameters ?? [], parameters: [...captures, ...unit.arrow.parameters.map(parameter => {
           const type = (parameter.type ?? null) ?? (checker.typeToTypeNode(checker.getTypeAtLocation(parameter.name), parameter, ts.NodeBuilderFlags.NoTruncation) ?? null);
           const annotated = type ? annotateBinding(parameter, type) : parameter;
-          if (!ts.isParameter(annotated)) throw new Error("Invalid async parameter annotation");
+          if (!ts.isParameter(annotated)) throw new Error("Invalid local parameter annotation");
           return ts.visitEachChild(annotated, visit, context);
         })], returns: unit.returns,
         body: ts.visitNode(body, visit, ts.isBlock) ?? body, question: false });

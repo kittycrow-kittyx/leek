@@ -209,3 +209,18 @@ export function indexedCodePoint(index: number): number {
 export function requiredCodePoint(index: number): number {
   return requiredOr("\0😀\ud800Z".codePointAt(index) ?? null, -7);
 }
+
+
+class SynchronousCapture {
+  private base = 3;
+  run(input: number): number {
+    let count = input;
+    const scale = input + this.base;
+    const walk = (depth: number): number => { count++; return depth > 0 ? walk(depth - 1) + scale : this.base + count; };
+    const first = walk(2);
+    count += 2;
+    return first + walk(0);
+  }
+}
+
+export function synchronousCapture(input: number): number { return new SynchronousCapture().run(input); }

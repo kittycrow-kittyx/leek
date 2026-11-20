@@ -141,3 +141,39 @@ console.log(JSON.stringify(events));`;
   assert.match(result.text, /private async __leek_/);
   assert.doesNotMatch(result.text, /\.then\(async|\.catch\(async|\.finally\(async/);
 });
+
+
+test("synchronous local recursion and captured mutation remain synchronous", () => {
+  const source = `export {};
+class Counter {
+  private base = 3;
+  run(input: number): number {
+    let count = input;
+    const scale = input + this.base;
+    const walk = (depth: number): number => { count++; return depth > 0 ? walk(depth - 1) + scale : this.base + count; };
+    const first = walk(2);
+    count += 2;
+    return first + walk(0);
+  }
+}
+console.log(JSON.stringify([new Counter().run(1), new Counter().run(4)]));`;
+  const output = transform(source, true);
+  assert.match(output.text, /private __leek_/);
+  assert.doesNotMatch(output.text, /async|const walk =/);
+});
+
+test("synchronous promise-returning locals preserve identity and immediate throws", () => {
+  const source = `export {};
+class Identity {
+  run(pending: Promise<number>): Promise<number> {
+    const forward = (fail: boolean): Promise<number> => { if (fail) throw new Error("immediate"); return pending; };
+    try { forward(true); } catch(error) { console.log(error instanceof Error ? error.message : "unexpected"); }
+    return forward(false);
+  }
+}
+const pending = Promise.resolve(42);
+console.log(new Identity().run(pending) === pending);`;
+  const output = transform(source, true);
+  assert.doesNotMatch(output.text, /async/);
+  assert.equal(output.output.trim(), "immediate\ntrue");
+});
