@@ -12,10 +12,10 @@ Numeric predicates on typed Number operands use the existing `F64.isNaN`, `F64.i
 
 `uncheckedReference` supplies the checking-only identity signature for AssemblyScript's `unchecked` builtin. `WasmLowering.usesUnchecked` records its use in typed-array loops whose generated condition checks each element's index before reading it.
 
-`wasmPrelude(compiler, work)` stages the pinned baseline prelude and aliases AssemblyScript's existing F64, NativeMath, Int64Array and Uint64Array exports. Its inline LeekMulU32 adapter calls Baguette's mulU32 without supplying another multiplication implementation. Instruction tests require the hot loop to retain native integer loads, XOR and multiplication.
+The [compiler workspace](../wasm-compiler.md) stages the pinned prelude and aliases AssemblyScript's existing operations. Instruction tests require the hot loop to retain native integer loads, XOR and multiplication.
 
 The native profile binds JavaScript BigInt64Array and BigUint64Array names to AssemblyScript’s existing Int64Array and Uint64Array storage. Native tests cover length allocation, signed and unsigned boundary values, indexed defaults and iteration. Concrete ArrayBuffer constructors use the [native view adapter](views.md). Shared buffers and other constructor overloads still require compatibility lowering before whole-OS emission can succeed.
 
-The staged profile also applies [local exception control flow](exceptions.md) before capture analysis. Only closed synchronous Error throws qualify; general exceptions and coroutine propagation remain unsupported.
+The staged profile applies [native exception regions](native-exceptions.md) after nullable lowering. Coroutine rejection uses the existing native task machinery. Source async catches and finally still require lowering.
 
 `WasmLowering.views` records the typed-array class names whose checking contracts must be staged. The prelude delegates these constructors to the inherited native wrap implementation.

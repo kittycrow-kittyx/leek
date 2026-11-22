@@ -41,6 +41,11 @@ function numericCases(): number[] {
 /** Compare native numeric operations and presence guards against source semantics at coercion and storage boundaries. */
 function checkNumbers(exports: WebAssembly.Exports): void {
   assert.equal(call(exports, "nativeEnvironment"), 1, "native WASM uses the source fallback for absent browser capabilities");
+  const exceptions = { crossCallCatch: reference.crossCallCatch, crossCallRethrow: reference.crossCallRethrow,
+    nativeRangeCatch: reference.nativeRangeCatch, crossCallLoop: reference.crossCallLoop };
+  for (const [name, operation] of Object.entries(exceptions)) for (const input of [-5, -1, 0, 1, 5]) assert.equal(call(exports, name, input), operation(input));
+  for (let index = 0; index < 10000; index++) assert.equal(call(exports, "crossCallCatch", -1), -1, "exception unwinding restores GC roots");
+  for (let index = 0; index < 10000; index++) assert.throws(() => call(exports, "crossCallThrow", -1), "exported exceptions restore the native stack before reaching the host");
   for (const value of [-7, 0, 1, 4, 12]) assert.equal(call(exports, "synchronousCapture", value), reference.synchronousCapture(value));
   assert.equal(call(exports, "bigintLoop"), reference.bigintLoop());
   assert.equal(call(exports, "mixedBufferViews"), reference.mixedBufferViews());
@@ -82,6 +87,14 @@ function checkNumbers(exports: WebAssembly.Exports): void {
 }
 
 async function checkClosures(exports: WebAssembly.Exports): Promise<void> {
+  for (const input of [-1, 1]) {
+    assert.equal(call(exports, "beginFailure", input), reference.beginFailure(input), "rejection remains inside native task frames");
+    const task = reference.failureCompletion;
+    assert.ok(task);
+    if (input < 0) await assert.rejects(task, /native error/);
+    else await task;
+    assert.equal(call(exports, "failureResult"), reference.failureResult(), "rejected awaits cannot resume with default values");
+  }
   for (const input of [-1, 0, 4, 7]) {
     assert.equal(call(exports, "beginClosure", input), reference.beginClosure(input));
     for (let step = 0; !reference.closureReady() && step < 100; step++) await Promise.resolve();

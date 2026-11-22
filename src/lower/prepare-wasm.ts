@@ -8,8 +8,7 @@ import { lowerNullable, referenceRead } from "./nullish.ts";
 import { lowerClosures } from "./closures.ts";
 import { lowerRequired } from "./required.ts";
 import { lowerPlatform } from "./platform.ts";
-import { lowerLocalExceptions } from "./exceptions.ts";
-import { lowerErrorCalls } from "./error-calls.ts";
+import { exceptionReference, lowerNativeExceptions } from "./native-exceptions.ts";
 
 const intrinsicFile = "__leek_wasm_intrinsics.ts";
 
@@ -23,11 +22,12 @@ function stagedGraph(input: LoweredProject): StagedGraph {
 }
 
 /** Each phase resolves the previous phase's written source and validates every path before rewriting a file. */
-function rewriteGraph(graph: StagedGraph, lower: (file: ts.SourceFile, checker: ts.TypeChecker) => string, exclude = ""): void {
+function rewriteGraph(graph: StagedGraph, lower: (file: ts.SourceFile, checker: ts.TypeChecker, files: ts.SourceFile[]) => string, exclude = ""): void {
   const program = ts.createProgram(graph.files, graph.options);
   const checker = program.getTypeChecker();
-  for (const file of stagedFiles(program, graph.root).filter(file => file.fileName !== exclude)) {
-    const output = lower(file, checker);
+  const files = stagedFiles(program, graph.root).filter(file => file.fileName !== exclude);
+  for (const file of files) {
+    const output = lower(file, checker, files);
     if (output !== file.text) writeFileSync(file.fileName, output);
   }
 }
@@ -42,23 +42,32 @@ export function prepareWasmSource(input: LoweredProject): string[] {
   const graph = stagedGraph(input);
   const intrinsic = resolve(graph.root, intrinsicFile);
   const references = new Set<string>();
+  let intrinsicWritten = false;
+  const writeReferences = (): void => {
+    if (!references.size) return;
+    writeFileSync(intrinsic, [...references].join(""), { flag: intrinsicWritten ? "w" : "wx" });
+    intrinsicWritten = true;
+  };
   rewriteGraph(graph, lowerPlatform);
-  rewriteGraph(graph, lowerErrorCalls);
-  rewriteGraph(graph, lowerLocalExceptions);
   rewriteGraph(graph, lowerClosures);
   rewriteGraph(graph, (file, checker) => {
     const output = lowerNullable(file, checker, intrinsicPath(file, intrinsic));
     if (output.usesReferenceRead) references.add(referenceRead);
     return output.text;
   });
-  const referenceModuleWritten = references.size > 0;
-  if (referenceModuleWritten) writeFileSync(intrinsic, [...references].join(""), { flag: "wx" });
+  writeReferences();
   rewriteGraph(graph, (file, checker) => lowerNullable(file, checker).text, intrinsic);
   const program = ts.createProgram(graph.files, graph.options);
   const checker = program.getTypeChecker();
   for (const [file, text] of lowerRequired(stagedFiles(program, graph.root).filter(file => file.fileName !== intrinsic), checker)) {
     if (text !== readFileSync(file, "utf8")) writeFileSync(file, text);
   }
+  rewriteGraph(graph, (file, checker, files) => {
+    const output = lowerNativeExceptions(file, checker, intrinsicPath(file, intrinsic), files);
+    if (output.used) references.add(exceptionReference);
+    return output.text;
+  }, intrinsic);
+  writeReferences();
   rewriteGraph(graph, (file, checker) => {
     const output = lowerWasm(file, checker, intrinsicPath(file, intrinsic));
     if (output.usesMultiply) references.add(multiplyReference);
@@ -69,7 +78,7 @@ export function prepareWasmSource(input: LoweredProject): string[] {
     return output.text;
   }, intrinsic);
   if (!references.size) return [];
-  writeFileSync(intrinsic, [...references].join(""), { flag: referenceModuleWritten ? "w" : "wx" });
+  writeReferences();
   return [intrinsic];
 }
 

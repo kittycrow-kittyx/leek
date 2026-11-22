@@ -13,6 +13,42 @@ export function shl(a: number, b: number): number { return a << b; }
 export function shr(a: number, b: number): number { return a >> b; }
 export function ushr(a: number, b: number): number { return a >>> b; }
 
+class NativeError extends Error {
+  constructor(readonly code: number) { super("native error"); this.name = "NativeError"; }
+}
+
+export function crossCallThrow(input: number): number {
+  const roots = new Array<string>(200);
+  if (input < 0) throw new NativeError(input);
+  return input + roots.length;
+}
+
+export function crossCallCatch(input: number): number {
+  try { return crossCallThrow(input); }
+  catch (error) { return error instanceof NativeError ? error.code : -99; }
+}
+
+export function crossCallRethrow(input: number): number {
+  try {
+    try { return crossCallThrow(input); }
+    catch (error) { if (error instanceof NativeError) throw error; return -1; }
+  } catch (error) { return error instanceof NativeError ? error.code * 2 : -99; }
+}
+
+export function nativeRangeCatch(input: number): number {
+  try { if (input < 0) return new Array<number>(-1).length; return 5; }
+  catch (error) { return error instanceof RangeError ? -1 : -99; }
+}
+
+export function crossCallLoop(input: number): number {
+  let value = 0;
+  for (let index = 0; index < 5; index++) {
+    try { value += crossCallThrow(input + index); }
+    catch { if (index === 0) continue; break; }
+  }
+  return value;
+}
+
 export function predicates(value: number): number {
   return (Number.isNaN(value) ? 1 : 0) + (Number.isFinite(value) ? 2 : 0) +
     (Number.isInteger(value) ? 4 : 0) + (Number.isSafeInteger(value) ? 8 : 0);
@@ -86,6 +122,17 @@ export function beginClosure(input: number): number {
 
 export function closureReady(): number { return asyncCompletion !== null && asyncReady ? 1 : 0; }
 export function closureValue(): number { return asyncValue; }
+
+let failureValue = -1;
+export let failureCompletion: Promise<void> | null = null;
+async function failingLeaf(input: number): Promise<number> {
+  await new ClosureCounter().run(0);
+  return crossCallThrow(input);
+}
+async function failingVoid(input: number): Promise<void> { failureValue = await failingLeaf(input); }
+async function failingChain(input: number): Promise<void> { await failingVoid(input); failureValue += 1; }
+export function beginFailure(input: number): number { failureValue = -1; failureCompletion = failingChain(input); return 0; }
+export function failureResult(): number { return failureValue; }
 
 export function mapDefault(present: number, value: number): number {
   const map: Map<string, number> = new Map<string, number>();

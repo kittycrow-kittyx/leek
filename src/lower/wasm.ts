@@ -1,11 +1,9 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
 import ts from "typescript";
 import { nativeVariable } from "../../baguette/src/ast.ts";
 import { numericCall } from "./numeric.ts";
 import { arrayType, integerOperation, integerStorage, integerValue, nativeWidths, signed, unsigned, unwrap } from "./integers.ts";
 import { lowerArrayLoop } from "./loops.ts";
-import { bufferView, viewName, viewPrelude } from "./views.ts";
+import { bufferView, viewName } from "./views.ts";
 
 
 // Bake checks these reference contracts; Baguette omits their bodies and uses
@@ -152,16 +150,4 @@ export function lowerWasm(source: ts.SourceFile, checker: ts.TypeChecker, intrin
     if (!used.changed) return { text: source.text, ...flags };
     return { text: printWasm(source, result.transformed[0] ?? source, flags, used.widths, intrinsicSpecifier), ...flags };
   } finally { result.dispose(); }
-}
-
-/** Alias existing native operations without reserving canonical source names. */
-export function wasmPrelude(compiler: string, work: string): string {
-  const path = resolve(work, "leek-prelude.ts");
-  const inherited = readFileSync(resolve(compiler, "prelude/teto-baseline.ts"), "utf8");
-  writeFileSync(path, inherited + '\nimport { Int64Array as BigInt64Array, Uint64Array as BigUint64Array } from "~lib/typedarray";\n' +
-    'import { F64 as LeekF64 } from "~lib/number";\n' +
-    'import { NativeMath as LeekNativeMath } from "~lib/math";\n' +
-    '@inline function LeekReferenceAt<T>(values: Array<T>, index: i32): T | null { return unchecked(values[index]); }\n' +
-    '@inline function LeekMulU32(left: u32, right: u32): u32 { return mulU32(left, right); }\n' + viewPrelude());
-  return path;
 }

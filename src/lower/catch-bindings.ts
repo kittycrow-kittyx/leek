@@ -23,22 +23,6 @@ function aliasValue(initializer: ts.Expression, known: ReadonlySet<ts.Symbol>, c
     librarySymbol(checker.getSymbolAtLocation(constructor) ?? null) ? present : null;
 }
 
-/** Exclude Error metadata, primitive narrowing and object escapes; native message, name and string conversion retain their contracts. */
-function caughtRead(node: ts.Identifier, checker: ts.TypeChecker): boolean {
-  let value: ts.Expression = node;
-  while (ts.isParenthesizedExpression(value.parent) || ts.isNonNullExpression(value.parent) || ts.isAsExpression(value.parent) || ts.isTypeAssertionExpression(value.parent)) value = value.parent;
-  const parent = value.parent;
-  if (ts.isTypeOfExpression(parent)) return true;
-  if (ts.isPropertyAccessExpression(parent) && parent.expression === value) {
-    return ["message", "name"].includes(parent.name.text) || parent.name.text === "toString" && ts.isCallExpression(parent.parent) && parent.parent.expression === parent && parent.parent.arguments.length === 0;
-  }
-  if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword && parent.left === value) {
-    const constructor = unwrap(parent.right);
-    return ts.isIdentifier(constructor) && ["Error", "RangeError", "TypeError", "SyntaxError", "URIError"].includes(constructor.text) && librarySymbol(checker.getSymbolAtLocation(constructor) ?? null);
-  }
-  return errorString(parent, checker) === value;
-}
-
 /** Track only read-only aliases in the catch's own block; var bindings and outer assignments could export the object. */
 function aliasesOf(clause: ts.CatchClause, known: Set<ts.Symbol>, checker: ts.TypeChecker): Map<ts.VariableDeclaration, ts.Expression> {
   const aliases = new Map<ts.VariableDeclaration, ts.Expression>();
@@ -56,27 +40,9 @@ function aliasesOf(clause: ts.CatchClause, known: Set<ts.Symbol>, checker: ts.Ty
   return aliases;
 }
 
-/** Return the aliases that can be folded only after the caller proves that this catch receives standard Errors exclusively. */
-export function catchBindings(clause: ts.CatchClause, checker: ts.TypeChecker): Map<ts.VariableDeclaration, ts.Expression> | null {
+/** Track read-only Error aliases after the caller proves the incoming throw domain. */
+export function catchAliases(clause: ts.CatchClause, checker: ts.TypeChecker): Map<ts.VariableDeclaration, ts.Expression> {
   const variable = clause.variableDeclaration ?? null;
-  if (!variable) return new Map<ts.VariableDeclaration, ts.Expression>();
-  if (!ts.isIdentifier(variable.name)) return null;
-  const symbol = checker.getSymbolAtLocation(variable.name) ?? null;
-  if (!symbol || parameterWritten(clause.block, symbol, checker)) return null;
-  const known = new Set([symbol]);
-  const aliases = aliasesOf(clause, known, checker);
-  let valid = true;
-  const scan = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && aliases.has(node)) return;
-    if (ts.isIdentifier(node) && ["eval", "Function"].includes(node.text)) valid = false;
-    const declaration = ts.isVariableDeclaration(node) || ts.isBindingElement(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) ? node.name ?? null : null;
-    if (declaration && ts.isIdentifier(declaration) && declaration.text === variable.name.getText()) valid = false;
-    const reference = ts.isIdentifier(node) ? valueSymbol(node, checker) : null;
-    const type = reference && known.has(reference) ? checker.getTypeAtLocation(node) : null;
-    const primitive = ts.TypeFlags.NumberLike | ts.TypeFlags.BigIntLike | ts.TypeFlags.StringLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.ESSymbolLike;
-    if (type && (Boolean(type.flags & primitive) || ts.isIdentifier(node) && !caughtRead(node, checker))) valid = false;
-    ts.forEachChild(node, scan);
-  };
-  scan(clause.block);
-  return valid ? aliases : null;
+  const symbol = variable && ts.isIdentifier(variable.name) ? valueSymbol(variable.name, checker) : null;
+  return symbol ? aliasesOf(clause, new Set([symbol]), checker) : new Map<ts.VariableDeclaration, ts.Expression>();
 }

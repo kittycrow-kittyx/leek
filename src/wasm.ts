@@ -7,10 +7,10 @@ import type { LoweredProject, SourceManifest } from "./lower/index.ts";
 import type { WatLayout } from "../baguette/src/wat-modules.ts";
 import { prepareWasmAbi } from "./wasm-abi.ts";
 import { prepareWasmSource } from "./lower/prepare-wasm.ts";
-import { wasmPrelude } from "./lower/wasm.ts";
 import { nativeWidths } from "./lower/integers.ts";
 import { nullableAliases } from "./lower/nullish.ts";
 import { requiredAliases } from "./lower/required.ts";
+import { wasmCompiler, wasmPrelude } from "./wasm-compiler.ts";
 
 const sourceManifest: (text: string) => SourceManifest = JSON.parse;
 const watLayout: (text: string) => WatLayout = JSON.parse;
@@ -46,7 +46,7 @@ export function emitWasm(compiler: string, input: LoweredProject, outputDir: str
   // Baguette performs its own Bake stage; select the hosted engine explicitly.
   execFileSync(process.execPath, [
     resolve(compiler, "src/compiler.ts"), "--config", config, "--emit-modular-wat"
-  ], { cwd: compiler, stdio: "inherit", env: { ...process.env, BAKE_ENGINE: "host" } });
+  ], { cwd: wasmCompiler(compiler, dirname(input.project)), stdio: "inherit", env: { ...process.env, BAKE_ENGINE: "host" } });
   const source = sourceManifest(readFileSync(input.sourceManifest, "utf8"));
   const layout = watLayout(readFileSync(resolve(outputDir, "wat/leek/layout.json"), "utf8"));
   const matched = new Set<string>();

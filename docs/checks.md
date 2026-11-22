@@ -46,3 +46,8 @@ reference binary exactly. Nullable expression tests check getters, lazy fallback
 recursion, loops, local type scopes and native execution. Source staging tests
 require inherited kernel modules and reject escapes before a pass can write to
 canonical source. These fixtures do not establish whole-OS compilation or boot.
+
+Native exception tests retain cross-function calls, subclass fields, nested
+rethrows and loop exits. Repeated allocation and unwinding exercise GC root
+restoration. Value and void coroutine tasks must retain rejection through
+awaited calls instead of resuming with default values.
