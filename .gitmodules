@@ -7,3 +7,7 @@
 [submodule "crust"]
 	path = crust
 	url = https://github.com/kittycrow-kittyx/crust.git
+
+[submodule "mikuOS-thistle"]
+	path = mikuOS-thistle
+	url = https://github.com/kittycrow-kittyx/mikuOS-thistle.git
