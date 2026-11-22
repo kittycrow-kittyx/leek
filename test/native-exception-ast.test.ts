@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CommonFlags, NodeKind, Parser, type ClassDeclaration, type FieldDeclaration } from "assemblyscript";
+import { CommonFlags, NodeKind, Parser, type FieldDeclaration } from "assemblyscript";
 import { nativeExceptionAst } from "../src/native-exception-ast.ts";
 
-test("native frame AST removes redundant constructor field assertions, not conditional ones", () => {
+test("native frame AST retains only necessary definite assignment flags", () => {
   const parser = new Parser();
   parser.parseFile(`class DummyTask { __leek_reject(error: Error): void {} }
 class __BqFrame_Fixture {
@@ -19,18 +19,24 @@ class __BqFrame_Fixture {
   __bq_resume_frame(): void {}
 }`, "frame-fixture.ts", false);
   assert.equal(parser.diagnostics.length, 0);
-  const source = parser.sources[0];
-  assert.ok(source);
-  const klass = source.statements.find(node => node.kind === NodeKind.ClassDeclaration && node.name.text === "__BqFrame_Fixture");
-  assert.ok(klass && klass.kind === NodeKind.ClassDeclaration);
-  if (!klass || klass.kind !== NodeKind.ClassDeclaration) throw new Error("Missing native frame fixture");
-  const fields = (klass as ClassDeclaration).members.filter(member => member.kind === NodeKind.FieldDeclaration) as FieldDeclaration[];
-  const state = (): Map<string, boolean> => new Map(fields.map(field => [field.name.text, Boolean(field.flags & CommonFlags.DefinitelyAssigned)]));
-  assert.deepEqual([...state().values()], [true, true, true, true]);
+  const source = parser.sources[0] ?? null;
+  if (!source) throw new Error("Missing native frame source");
+  const declaration = source.statements[1] ?? null;
+  if (!declaration || declaration.kind !== NodeKind.ClassDeclaration) throw new Error("Missing native frame fixture");
+  assert.equal(declaration.name.text, "__BqFrame_Fixture");
+  const fields = declaration.members.filter((member): member is FieldDeclaration => member.kind === NodeKind.FieldDeclaration);
+  const state = (): Array<[string, boolean]> => fields.map(field => [field.name.text, Boolean(field.flags & CommonFlags.DefinitelyAssigned)]);
+  assert.deepEqual(state(), [
+    ["__bq_task", true],
+    ["__bq_value", true],
+    ["__bq_optional", true],
+    ["__bq_pending", true]
+  ]);
   nativeExceptionAst(parser);
-  const result = state();
-  assert.equal(result.get("__bq_task"), false);
-  assert.equal(result.get("__bq_value"), false);
-  assert.equal(result.get("__bq_optional"), true);
-  assert.equal(result.get("__bq_pending"), true);
+  assert.deepEqual(state(), [
+    ["__bq_task", false],
+    ["__bq_value", false],
+    ["__bq_optional", true],
+    ["__bq_pending", true]
+  ]);
 });

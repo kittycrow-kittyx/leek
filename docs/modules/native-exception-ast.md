@@ -6,4 +6,4 @@ Existing Baguette task classes gain a rooted Error field and a rejection method.
 
 Generated members are attached to the original source ranges before compiler initialisation. Unsupported frame or task shapes fail explicitly. This adapter does not by itself lower source try/catch regions across coroutine states.
 
-Leek removes redundant definite-assignment assertions on Baguette coroutine-frame fields only when an unconditional top-level constructor assignment to `this.field` proves initialisation. Conditional writes and fields populated after suspension retain their assertions. This avoids AssemblyScript AS233 diagnostics without changing pinned Baguette output or masking uninitialised storage.
+For generated `__BqFrame` classes, clear a field's definite-assignment flag only when the constructor assigns that field directly at top level. Conditional assignments and fields populated during coroutine execution retain their flags. Pinned Baguette sources remain unchanged.
