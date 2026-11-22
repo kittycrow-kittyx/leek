@@ -6,4 +6,4 @@ Existing Baguette task classes gain a rooted Error field and a rejection method.
 
 Generated members are attached to the original source ranges before compiler initialisation. Unsupported frame or task shapes fail explicitly. This adapter does not by itself lower source try/catch regions across coroutine states.
 
-For generated `__BqFrame` classes, clear a field's definite-assignment flag only when the constructor assigns that field directly at top level. Conditional assignments and fields populated during coroutine execution retain their flags. Pinned Baguette sources remain unchanged.
+For Baguette-generated `__BqFrame_*`, `__BqTask`, `__BqTaskVoid` and `__BqContinuation` classes, clear redundant type-only definite-assignment assertions. AssemblyScript already zero/null-initialises these fields, and removing the assertion does not change execution or initialise fields earlier. Assertions in canonical kernel and userspace classes are preserved. Pinned Baguette sources remain unchanged.

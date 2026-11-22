@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { ClassDeclaration, CommonFlags, FieldDeclaration, Parser } from "assemblyscript";
 import { nativeExceptionAst } from "../src/native-exception-ast.ts";
 
-test("native frame AST retains only necessary definite assignment flags", () => {
+test("native frame AST removes type-only assertions from generated fields", () => {
   const parser = new Parser();
   parser.parseFile(`class DummyTask { __leek_reject(error: Error): void {} }
 class __BqFrame_Fixture {
@@ -36,7 +36,30 @@ class __BqFrame_Fixture {
   assert.deepEqual(state(), [
     ["__bq_task", false],
     ["__bq_value", false],
-    ["__bq_optional", true],
-    ["__bq_pending", true]
+    ["__bq_optional", false],
+    ["__bq_pending", false]
   ]);
+});
+
+test("native AST preserves canonical class assertions", () => {
+  const parser = new Parser();
+  parser.parseFile(`class CanonicalKernel {
+  pending!: i32;
+}
+class __BqContinuation {
+  value!: i32;
+  __bq_resume_frame(): void {}
+}`, "assertion-fixture.ts", false);
+  assert.equal(parser.diagnostics.length, 0);
+  nativeExceptionAst(parser);
+  const source = parser.sources[0] ?? null;
+  if (!source) throw new Error("Missing assertion fixture source");
+  const canonical = source.statements[0] ?? null;
+  const generated = source.statements[1] ?? null;
+  if (!(canonical instanceof ClassDeclaration) || !(generated instanceof ClassDeclaration)) throw new Error("Missing assertion fixture classes");
+  const canonicalField = canonical.members[0] ?? null;
+  const generatedField = generated.members[0] ?? null;
+  if (!(canonicalField instanceof FieldDeclaration) || !(generatedField instanceof FieldDeclaration)) throw new Error("Missing assertion fixture fields");
+  assert.ok(canonicalField.flags & CommonFlags.DefinitelyAssigned);
+  assert.equal(Boolean(generatedField.flags & CommonFlags.DefinitelyAssigned), false);
 });

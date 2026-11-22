@@ -1,4 +1,4 @@
-import { CommonFlags, Node, NodeKind, Parser, Token, type BinaryExpression, type BlockStatement, type CallExpression, type ClassDeclaration, type ExpressionStatement, type FieldDeclaration, type IdentifierExpression, type MethodDeclaration, type PropertyAccessExpression, type ReturnStatement, type ThrowStatement } from "assemblyscript";
+import { CommonFlags, Node, NodeKind, Parser, type BlockStatement, type CallExpression, type ClassDeclaration, type ExpressionStatement, type FieldDeclaration, type IdentifierExpression, type MethodDeclaration, type ReturnStatement, type ThrowStatement } from "assemblyscript";
 
 type Child = Node | Node[] | string | number | boolean | null;
 
@@ -57,24 +57,13 @@ function extendTask(klass: ClassDeclaration, empty: boolean): void {
   resume.body = (replacement as MethodDeclaration).body;
 }
 
-/** Remove redundant assertions only for fields unconditionally assigned by the frame constructor. */
-function constructorFields(klass: ClassDeclaration): void {
-  const constructor = klass.members.find(member => member.kind === NodeKind.MethodDeclaration && member.name.text === "constructor") ?? null;
-  if (!constructor || constructor.kind !== NodeKind.MethodDeclaration) return;
-  const body = (constructor as MethodDeclaration).body;
-  if (!body || body.kind !== NodeKind.Block) return;
-  const assigned = new Set<string>();
-  for (const statement of (body as BlockStatement).statements) {
-    if (statement.kind !== NodeKind.Expression) continue;
-    const expression = (statement as ExpressionStatement).expression;
-    if (expression.kind !== NodeKind.Binary || (expression as BinaryExpression).operator !== Token.Equals) continue;
-    const left = (expression as BinaryExpression).left;
-    if (left.kind !== NodeKind.PropertyAccess) continue;
-    const access = left as PropertyAccessExpression;
-    if (access.expression.kind === NodeKind.This) assigned.add(access.property.text);
-  }
+/** Baguette's synthetic fields use AssemblyScript's normal zero/null initialisation.
+ * The definite-assignment assertion is type-only and has no runtime effect.
+ * Remove it solely from Baguette-owned classes, leaving canonical OS classes untouched.
+ */
+function generatedFields(klass: ClassDeclaration): void {
   for (const member of klass.members) {
-    if (member.kind !== NodeKind.FieldDeclaration || !assigned.has(member.name.text)) continue;
+    if (member.kind !== NodeKind.FieldDeclaration) continue;
     const field = member as FieldDeclaration;
     field.flags &= ~CommonFlags.DefinitelyAssigned;
   }
@@ -123,7 +112,8 @@ export function nativeExceptionAst(parser: Parser): void {
     if (node.kind !== NodeKind.ClassDeclaration) return node;
     const klass = node as ClassDeclaration;
     if (["__BqTask", "__BqTaskVoid"].includes(klass.name.text)) extendTask(klass, klass.name.text === "__BqTaskVoid");
-    if (klass.name.text.startsWith("__BqFrame_")) { constructorFields(klass); extendFrame(klass); }
+    if (klass.name.text.startsWith("__BqFrame_") || ["__BqTask", "__BqTaskVoid", "__BqContinuation"].includes(klass.name.text)) generatedFields(klass);
+    if (klass.name.text.startsWith("__BqFrame_")) extendFrame(klass);
     return node;
   });
 }
