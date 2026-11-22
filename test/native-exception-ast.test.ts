@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CommonFlags, NodeKind, Parser, type FieldDeclaration } from "assemblyscript";
+import { ClassDeclaration, CommonFlags, FieldDeclaration, Parser } from "assemblyscript";
 import { nativeExceptionAst } from "../src/native-exception-ast.ts";
 
 test("native frame AST retains only necessary definite assignment flags", () => {
@@ -22,9 +22,9 @@ class __BqFrame_Fixture {
   const source = parser.sources[0] ?? null;
   if (!source) throw new Error("Missing native frame source");
   const declaration = source.statements[1] ?? null;
-  if (!declaration || declaration.kind !== NodeKind.ClassDeclaration) throw new Error("Missing native frame fixture");
+  if (!(declaration instanceof ClassDeclaration)) throw new Error("Missing native frame fixture");
   assert.equal(declaration.name.text, "__BqFrame_Fixture");
-  const fields = declaration.members.filter((member): member is FieldDeclaration => member.kind === NodeKind.FieldDeclaration);
+  const fields = declaration.members.filter((member): member is FieldDeclaration => member instanceof FieldDeclaration);
   const state = (): Array<[string, boolean]> => fields.map(field => [field.name.text, Boolean(field.flags & CommonFlags.DefinitelyAssigned)]);
   assert.deepEqual(state(), [
     ["__bq_task", true],
