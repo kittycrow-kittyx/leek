@@ -24,7 +24,7 @@ export interface ClosureUnit {
   callback: boolean;
 }
 
-function valueSymbol(node: ts.Identifier, checker: ts.TypeChecker): ts.Symbol | null {
+export function valueSymbol(node: ts.Identifier, checker: ts.TypeChecker): ts.Symbol | null {
   return ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node
     ? checker.getShorthandAssignmentValueSymbol(node.parent) ?? null : checker.getSymbolAtLocation(node) ?? null;
 }

@@ -9,6 +9,7 @@ import { lowerClosures } from "./closures.ts";
 import { lowerRequired } from "./required.ts";
 import { lowerPlatform } from "./platform.ts";
 import { lowerLocalExceptions } from "./exceptions.ts";
+import { lowerErrorCalls } from "./error-calls.ts";
 
 const intrinsicFile = "__leek_wasm_intrinsics.ts";
 
@@ -42,6 +43,7 @@ export function prepareWasmSource(input: LoweredProject): string[] {
   const intrinsic = resolve(graph.root, intrinsicFile);
   const references = new Set<string>();
   rewriteGraph(graph, lowerPlatform);
+  rewriteGraph(graph, lowerErrorCalls);
   rewriteGraph(graph, lowerLocalExceptions);
   rewriteGraph(graph, lowerClosures);
   rewriteGraph(graph, (file, checker) => {

@@ -9,6 +9,8 @@ Install the pinned dependencies and run `bun run build` before changing the lowe
 - [Native platform probes](modules/lower/platform.md)
 - [Nullable expression extension](modules/lower/nullish.md)
 - [Staged WASM preparation](modules/lower/prepare-wasm.md)
+- [Closed error helper calls](modules/lower/error-calls.md)
+- [Closed catch bindings](modules/lower/catch-bindings.md)
 - [Local exception facts](modules/lower/exception-facts.md)
 - [Local exception control flow](modules/lower/exceptions.md)
 - [Nullable predicate application](modules/lower/application.md)

@@ -7,3 +7,5 @@ Return paths exit directly. When all ordinary paths already exit, only a capture
 The pass uses Baguette’s native variable factory and the existing AssemblyScript Error class. Labelled statements are avoided because the pinned backend rejects them. Async functions, finally and exceptions from calls retain their original source for later propagation lowering. These local cases do not resolve the canonical kernel’s general exception support.
 
 Source tests compare returns, catch effects and loop exits with the original programme. Native WASM tests cover caught and ignored errors, early returns and nested-loop propagation, followed by independent modular WAT rebuilding.
+
+After the throw-domain proof, read-only aliases use their actual Error type. A standard Error normalisation selects its original true arm; the unreachable fallback is removed. Alias use must satisfy the same non-escaping metadata restrictions as the original binding.

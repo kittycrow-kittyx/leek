@@ -44,3 +44,42 @@ test("untracked effects, arbitrary throws, finally and narrowed primitive catche
   ];
   for (const source of sources) withTransformedSource(source, lowerLocalExceptions, (_file, output) => assert.equal(output, source));
 });
+
+test("proven Error catches fold normalisation and read-only aliases without running the fallback", () => {
+  const source = `const events:string[]=[];
+function fallback():Error { events.push("fallback"); return new Error("fallback"); }
+function run(input:number):number {
+  try { if(input<0)throw new Error("negative"); return input; }
+  catch(caughtValue) {
+    const error=caughtValue instanceof Error?caughtValue:fallback();
+    const copy=error;
+    events.push(copy.message);
+    return copy.message.length+copy.name.length;
+  }
+}
+function canonical(input:number):number {
+  try { if(input<0)throw new Error("negative"); return input; }
+  catch(caughtValue) {
+    const error=caughtValue instanceof Error?caughtValue:new Error(typeof caughtValue==="undefined"?"undefined":String(caughtValue));
+    return error.message.length;
+  }
+}
+console.log(JSON.stringify([[-1,0,4].map(run),[-1,0,4].map(canonical),events]));`;
+  const output=compareTransformedExecution(source,lowerLocalExceptions).text;
+  assert.doesNotMatch(output,/\btry\b|\bthrow\b|\bcatch\b|caughtValue instanceof Error/);
+  assert.match(output,/const error: Error = caughtValue/);
+});
+
+test("Error aliases exposing metadata, escaping or changing identity retain their original catches", { timeout: 30000 }, () => {
+  const head='function run():number { try { throw new Error("negative"); } catch(caughtValue) {';
+  const alias='const error=caughtValue instanceof Error?caughtValue:new Error("other");';
+  const sources=[
+    head+alias+' return error.stack?.length??0; } }',
+    head+alias+' const object={error}; return String(object.error).length; } }',
+    head+alias+' error.message="changed"; return error.message.length; } }',
+    head+alias+' let copy=error; copy=new Error("new"); return copy.message.length; } }',
+    head+'var error=caughtValue instanceof Error?caughtValue:new Error("other"); return error.message.length; } }',
+    head+' { const error=caughtValue instanceof Error?caughtValue:new Error("other"); return error.message.length; } } }'
+  ];
+  for(const source of sources) withTransformedSource(source,lowerLocalExceptions,(_file,output)=>assert.equal(output,source));
+});

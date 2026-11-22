@@ -9,3 +9,5 @@ Calls must retain the owning method's receiver. References inside a nested ordin
 Closure lifting accepts void results and native value types. Captures, parameters or results containing undefined or nullable primitives retain their closures pending optional storage.
 
 `parameterWritten(root, symbol, checker)` scans assignment targets, including destructuring, for writes to a binding. Optional-number consumer analysis also uses this check for helper parameters and function bindings.
+
+`valueSymbol(identifier, checker)` resolves shorthand property values to their original binding, rather than the newly created property symbol. Capture analysis and private helper reference checks share it so a shorthand escape cannot be mistaken for an unused function.

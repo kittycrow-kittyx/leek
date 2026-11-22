@@ -343,3 +343,37 @@ export function bufferViewLength(offset: number, length: number): number {
   const view = new BigInt64Array(new ArrayBuffer(32), offset, length);
   return view.length;
 }
+
+function tailChecked(input: number, label: string): number {
+  if (input < 0) throw new Error(label);
+  let value = input + 1;
+  for (let step = 0; step < 2; step++) value += step;
+  return value;
+}
+
+export function tailError(input: number): number {
+  try { return tailChecked(input++, "negative"); }
+  catch (caughtValue) {
+    const error = caughtValue instanceof Error ? caughtValue : new Error(typeof caughtValue === "undefined" ? "undefined" : String(caughtValue));
+    return error.message.length + input;
+  }
+}
+
+export function otherTailError(input: number): number {
+  const value = 3;
+  try { return tailChecked(input, "other"); }
+  catch (caughtValue) {
+    const error = caughtValue instanceof Error ? caughtValue : new Error("other");
+    const copy = error;
+    return copy.message.length + value;
+  }
+}
+
+let tailReached = 0;
+function checkedVoid(input: number): void { if (input < 0) throw new Error("negative"); }
+function useCheckedVoid(input: number): void {
+  try { return checkedVoid(input); }
+  catch (error) { tailReached = error instanceof Error ? 1 : 2; }
+  tailReached += 7;
+}
+export function voidTailError(input: number): number { tailReached = 0; useCheckedVoid(input); return tailReached; }

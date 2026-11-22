@@ -2,13 +2,22 @@ import ts from "typescript";
 import { nativeVariable } from "../../baguette/src/ast.ts";
 import { identifiers } from "./names.ts";
 import { localCatch } from "./exception-facts.ts";
+import { abruptCompletion } from "./function-body.ts";
+import { catchBindings } from "./catch-bindings.ts";
 
-/** Only a rewritten throw can reach the following catch when every ordinary path already exits. */
-function abruptCompletion(statement: ts.Statement): boolean {
-  if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement) || ts.isBreakStatement(statement) || ts.isContinueStatement(statement)) return true;
-  const alternate = ts.isIfStatement(statement) ? statement.elseStatement ?? null : null;
-  if (ts.isIfStatement(statement)) return abruptCompletion(statement.thenStatement) && alternate !== null && abruptCompletion(alternate);
-  return ts.isBlock(statement) && statement.statements.some(abruptCompletion);
+/** Fold aliases only after the throw-domain proof; the discarded normalisation fallback was unreachable in the original programme. */
+function catchBody(clause: ts.CatchClause, checker: ts.TypeChecker, context: ts.TransformationContext, visit: ts.Visitor<ts.Node, ts.Node>): ts.Statement[] {
+  const aliases = catchBindings(clause, checker);
+  if (!aliases) throw new Error("Missing closed catch binding proof");
+  const f = ts.factory;
+  return clause.block.statements.map(statement => {
+    if (!ts.isVariableStatement(statement)) return ts.visitNode(statement, visit, ts.isStatement) ?? statement;
+    const declarations = statement.declarationList.declarations.map(declaration => {
+      const value = aliases.get(declaration) ?? null;
+      return value ? nativeVariable(declaration.name, f.createTypeReferenceNode("Error"), value) : ts.visitEachChild(declaration, visit, context);
+    });
+    return f.updateVariableStatement(statement, statement.modifiers ?? [], f.updateVariableDeclarationList(statement.declarationList, declarations));
+  });
 }
 
 /** Convert closed local Error throws into ordinary loop exits and a separately guarded catch binding. */
@@ -55,7 +64,7 @@ export function lowerLocalExceptions(source: ts.SourceFile, checker: ts.TypeChec
       const caught = binding ? [f.createVariableStatement([], f.createVariableDeclarationList([
         nativeVariable(binding.name, f.createTypeReferenceNode("Error"), f.createNonNullExpression(value))
       ], ts.NodeFlags.Let))] : [];
-      const handler = f.createBlock([...caught, ...(ts.visitNode(clause.block, visit, ts.isBlock) ?? clause.block).statements], true);
+      const handler = f.createBlock([...caught, ...catchBody(clause, checker, context, visit)], true);
       changed = true;
       // The slot is read only after a throw assigned it and set the presence flag.
       return f.createBlock([

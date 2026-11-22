@@ -2,6 +2,7 @@ import ts from "typescript";
 import { arrayType, librarySymbol, unwrap } from "./integers.ts";
 import { functionOwner as owner } from "./function-body.ts";
 import { parameterWritten } from "./captures.ts";
+import { catchBindings } from "./catch-bindings.ts";
 
 
 /** Only standard Error construction has a known thrown shape; custom constructors and arbitrary values need propagation lowering. */
@@ -41,7 +42,7 @@ function safeUnary(node: ts.PrefixUnaryExpression | ts.PostfixUnaryExpression, c
 }
 
 /** Every executable operation in the block must either be non-throwing or an explicit standard Error throw. */
-function closedBlock(block: ts.Block, scope: ts.Node, checker: ts.TypeChecker): boolean {
+export function closedBlock(block: ts.Block, scope: ts.Node, checker: ts.TypeChecker): boolean {
   let throws = 0;
   const safe = (node: ts.Node): boolean => {
     if (ts.isTypeNode(node)) return true;
@@ -65,47 +66,26 @@ function closedBlock(block: ts.Block, scope: ts.Node, checker: ts.TypeChecker): 
   return safe(block) && throws > 0;
 }
 
-/** The caught value cannot escape or expose unsupported Error metadata. Message, name and standard string conversion retain their native contracts. */
-function caughtRead(node: ts.Identifier, checker: ts.TypeChecker): boolean {
-  let value: ts.Expression = node;
-  while (ts.isParenthesizedExpression(value.parent) || ts.isNonNullExpression(value.parent) || ts.isAsExpression(value.parent) || ts.isTypeAssertionExpression(value.parent)) value = value.parent;
-  const parent = value.parent;
-  if (ts.isTypeOfExpression(parent)) return true;
-  if (ts.isPropertyAccessExpression(parent) && parent.expression === value) {
-    return ["message", "name"].includes(parent.name.text) || parent.name.text === "toString" && ts.isCallExpression(parent.parent) && parent.parent.expression === parent && parent.parent.arguments.length === 0;
-  }
-  if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword && parent.left === value) {
-    const constructor = unwrap(parent.right);
-    return ts.isIdentifier(constructor) && ["Error", "RangeError", "TypeError", "SyntaxError", "URIError"].includes(constructor.text) && librarySymbol(checker.getSymbolAtLocation(constructor) ?? null);
-  }
-  return ts.isCallExpression(parent) && parent.arguments.length === 1 && (parent.arguments[0] ?? null) === value && ts.isIdentifier(parent.expression) && parent.expression.text === "String" && librarySymbol(checker.getSymbolAtLocation(parent.expression) ?? null);
+/** The generated Error binding must retain the standard constructor and type in its lexical scope. */
+export function standardError(point: ts.Node, checker: ts.TypeChecker): boolean {
+  return [ts.SymbolFlags.Value, ts.SymbolFlags.Type].every(flags => librarySymbol(checker.getSymbolsInScope(point, flags).find(symbol => symbol.getName() === "Error") ?? null));
 }
 
-function catchBinding(clause: ts.CatchClause, checker: ts.TypeChecker): boolean {
-  const variable = clause.variableDeclaration ?? null;
-  if (!variable) return true;
-  if (!ts.isIdentifier(variable.name)) return false;
-  const symbol = checker.getSymbolAtLocation(variable.name) ?? null;
-  if (!symbol || parameterWritten(clause.block, symbol, checker)) return false;
-  let valid = true;
-  const scan = (node: ts.Node): void => {
-    const declaration = ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) ? node.name ?? null : null;
-    if (declaration && ts.isIdentifier(declaration) && declaration.text === variable.name.getText()) valid = false;
-    if (ts.isShorthandPropertyAssignment(node) && (checker.getShorthandAssignmentValueSymbol(node) ?? null) === symbol) valid = false;
-    const reference = ts.isIdentifier(node) && (checker.getSymbolAtLocation(node) ?? null) === symbol;
-    const type = reference ? checker.getTypeAtLocation(node) : null;
-    if (type && (primitive(type) || Boolean(type.flags & ts.TypeFlags.ESSymbolLike) || ts.isIdentifier(node) && !caughtRead(node, checker))) valid = false;
-    ts.forEachChild(node, scan);
-  };
-  scan(clause.block);
-  return valid;
+/** A private helper may lose its stack frame only when a surrounding catch cannot inspect or export the thrown object. */
+export function localHandler(node: ts.Node, checker: ts.TypeChecker): boolean {
+  const scope = owner(node);
+  for (let current = node.parent; current && current !== scope; current = current.parent) {
+    if (!ts.isTryStatement(current) || node.pos < current.tryBlock.pos || node.end > current.tryBlock.end) continue;
+    const clause = current.catchClause ?? null;
+    return clause !== null && !(current.finallyBlock ?? null) && catchBindings(clause, checker) !== null && standardError(clause.block, checker);
+  }
+  return false;
 }
 
 /** A local catch needs a closed throw domain and an unshadowed standard Error type at both generated declaration scopes. */
 export function localCatch(node: ts.TryStatement, checker: ts.TypeChecker): ts.CatchClause | null {
   const clause = node.catchClause ?? null, scope = owner(node);
   const async = scope && ts.canHaveModifiers(scope) && (ts.getModifiers(scope) ?? []).some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
-  if (!clause || (node.finallyBlock ?? null) || !scope || async || !closedBlock(node.tryBlock, scope, checker) || !catchBinding(clause, checker)) return null;
-  const standard = (point: ts.Node): boolean => librarySymbol(checker.getSymbolsInScope(point, ts.SymbolFlags.Type).find(symbol => symbol.getName() === "Error") ?? null);
-  return standard(node) && standard(clause.block) ? clause : null;
+  if (!clause || (node.finallyBlock ?? null) || !scope || async || !closedBlock(node.tryBlock, scope, checker) || catchBindings(clause, checker) === null) return null;
+  return standardError(node, checker) && standardError(clause.block, checker) ? clause : null;
 }
