@@ -3,12 +3,13 @@ import { unwrap } from "./integers.ts";
 import { primitiveRead, type PrimitiveRead } from "./primitive-read.ts";
 import { parameterWritten } from "./captures.ts";
 
-export interface RequiredCall extends PrimitiveRead {
-  call: ts.CallExpression;
+interface CheckedHelper {
   helper: ts.FunctionDeclaration;
   signature: ts.Signature;
   typeParameter: ts.Symbol;
 }
+
+export interface RequiredCall extends PrimitiveRead, CheckedHelper { call: ts.CallExpression }
 
 /** Namespace specialisations initialise during module execution; cyclic modules can call hoisted functions earlier. */
 function acyclic(source: ts.SourceFile, checker: ts.TypeChecker): boolean {
@@ -52,7 +53,7 @@ function parameterSafe(helper: ts.FunctionDeclaration, checker: ts.TypeChecker):
   const visit = (node: ts.Node): void => {
     const signature = ts.isCallExpression(node) ? checker.getResolvedSignature(node) ?? null : null;
     if (signature && (signature.getDeclaration() ?? null) === helper) safe = false;
-    if (ts.isIdentifier(node) && node.text === "arguments" || node.kind === ts.SyntaxKind.ThisKeyword || node.kind === ts.SyntaxKind.SuperKeyword || ts.isAwaitExpression(node) || ts.isYieldExpression(node)) safe = false;
+    if (ts.isIdentifier(node) && ["arguments", "eval", "Function"].includes(node.text) || node.kind === ts.SyntaxKind.ThisKeyword || node.kind === ts.SyntaxKind.SuperKeyword || ts.isAwaitExpression(node) || ts.isYieldExpression(node)) safe = false;
     if (ts.isShorthandPropertyAssignment(node) && (checker.getShorthandAssignmentValueSymbol(node) ?? null) === symbol) safe = false;
     if (!ts.isIdentifier(node) || (checker.getSymbolAtLocation(node) ?? null) !== symbol || nullTest(node, symbol, checker)) { ts.forEachChild(node, visit); return; }
     const type = checker.getTypeAtLocation(node);
@@ -66,23 +67,22 @@ function parameterSafe(helper: ts.FunctionDeclaration, checker: ts.TypeChecker):
   return safe;
 }
 
+function nullableInput(node: ts.CallExpression): ts.BinaryExpression | null {
+  const argument = node.arguments[0] ?? null;
+  const nullable = argument ? unwrap(argument) : null;
+  return nullable && ts.isBinaryExpression(nullable) && nullable.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken && unwrap(nullable.right).kind === ts.SyntaxKind.NullKeyword ? nullable : null;
+}
+
 /** Find concrete primitive calls whose first argument is a nullable typed-array read. */
 export function requiredCall(node: ts.Node, checker: ts.TypeChecker): RequiredCall | null {
   if (!ts.isCallExpression(node) || (node.questionDotToken ?? null) || node.arguments.some(ts.isSpreadElement)) return null;
-  const argument = node.arguments[0] ?? null;
-  const nullable = argument ? unwrap(argument) : null;
-  if (!nullable || !ts.isBinaryExpression(nullable) || nullable.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken || unwrap(nullable.right).kind !== ts.SyntaxKind.NullKeyword) return null;
+  const nullable = nullableInput(node);
+  if (!nullable) return null;
   const inputRead = primitiveRead(nullable.left, checker);
   if (!inputRead) return null;
-  const signature = checker.getResolvedSignature(node) ?? null;
-  const helper = signature ? signature.getDeclaration() ?? null : null;
-  if (!signature || !helper || !ts.isFunctionDeclaration(helper) || !ts.isSourceFile(helper.parent) || !(helper.name ?? null) || !(helper.body ?? null) || (helper.typeParameters ?? []).length !== 1 || helper.parameters.length !== node.arguments.length) return null;
-  if ((helper.modifiers ?? []).some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) || (helper.asteriskToken ?? null)) return null;
-  if (!ts.isIdentifier(node.expression)) return null;
-  const callee = checker.getSymbolAtLocation(node.expression) ?? null;
-  const target = callee && callee.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(callee) : callee;
-  if (!target || (target.valueDeclaration ?? null) !== helper || parameterWritten(helper.getSourceFile(), target, checker) || !acyclic(helper.getSourceFile(), checker)) return null;
-  if (helper.parameters.some(parameter => !ts.isIdentifier(parameter.name) || (parameter.initializer ?? null) || (parameter.questionToken ?? null) || (parameter.dotDotDotToken ?? null))) return null;
+  const bound = checkedHelper(node, checker);
+  if (!bound || !acyclic(bound.helper.getSourceFile(), checker)) return null;
+  const { helper, signature } = bound;
   const first = signature.parameters[0] ?? null;
   const input = first ? checker.getTypeOfSymbolAtLocation(first, node) : null;
   if (!input || !input.isUnion() || !input.types.some(type => Boolean(type.flags & ts.TypeFlags.Null))) return null;
@@ -91,7 +91,45 @@ export function requiredCall(node: ts.Node, checker: ts.TypeChecker): RequiredCa
   if (!(primitive.flags & family) || !(signature.getReturnType().flags & family)) return null;
   const others = signature.parameters.slice(1).map(parameter => checker.getTypeOfSymbolAtLocation(parameter, node));
   if (others.some(type => !(type.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.StringLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.BigIntLike)))) return null;
+  return parameterSafe(helper, checker) ? { ...inputRead, call: node, ...bound } : null;
+}
+
+function checkedHelper(node: ts.CallExpression, checker: ts.TypeChecker): CheckedHelper | null {
+  if ((node.questionDotToken ?? null) || node.arguments.some(ts.isSpreadElement)) return null;
+  const signature = checker.getResolvedSignature(node) ?? null;
+  const helper = signature ? signature.getDeclaration() ?? null : null;
+  if (!signature || !helper || !ts.isFunctionDeclaration(helper) || !ts.isSourceFile(helper.parent) || !(helper.name ?? null) || !(helper.body ?? null) || (helper.typeParameters ?? []).length !== 1 || helper.parameters.length !== node.arguments.length) return null;
+  if ((helper.modifiers ?? []).some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) || (helper.asteriskToken ?? null)) return null;
+  if (!ts.isIdentifier(node.expression)) return null;
+  const callee = checker.getSymbolAtLocation(node.expression) ?? null;
+  const target = callee && callee.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(callee) : callee;
+  if (!target || (target.valueDeclaration ?? null) !== helper || parameterWritten(helper.getSourceFile(), target, checker)) return null;
+  if (helper.parameters.some(parameter => !ts.isIdentifier(parameter.name) || (parameter.initializer ?? null) || (parameter.questionToken ?? null) || (parameter.dotDotDotToken ?? null))) return null;
   const parameter = (helper.typeParameters ?? [])[0] ?? null;
   const typeParameter = parameter ? checker.getSymbolAtLocation(parameter.name) ?? null : null;
-  return typeParameter && parameterSafe(helper, checker) ? { ...inputRead, call: node, helper, signature, typeParameter } : null;
+  return typeParameter ? { helper, signature, typeParameter } : null;
+}
+
+/** A normal return must be the guarded input itself; the call argument's nullish boundary also excludes a returned undefined. */
+export function requiredResult(node: ts.CallExpression, checker: ts.TypeChecker): boolean {
+  if (!nullableInput(node)) return false;
+  const bound = checkedHelper(node, checker);
+  if (!bound || !parameterSafe(bound.helper, checker)) return false;
+  const first = bound.helper.parameters[0] ?? null, body = bound.helper.body ?? null;
+  const symbol = first ? checker.getSymbolAtLocation(first.name) ?? null : null;
+  if (!symbol || !body) return false;
+  const input = first ? checker.getTypeAtLocation(first.name) : null;
+  if (!input || !input.isUnion() || !input.types.some(part => Boolean(part.flags & ts.TypeFlags.Null))) return false;
+  let returns = 0, valid = true;
+  const scan = (current: ts.Node): void => {
+    if (ts.isFunctionLike(current)) return;
+    const returned = ts.isReturnStatement(current);
+    const expression = returned ? current.expression ?? null : null;
+    const value = expression ? unwrap(expression) : null;
+    if (returned) returns++;
+    if (returned && (!value || !ts.isIdentifier(value) || (checker.getSymbolAtLocation(value) ?? null) !== symbol)) valid = false;
+    ts.forEachChild(current, scan);
+  };
+  scan(body);
+  return valid && returns > 0;
 }

@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
-import { withTransformedSource } from "./transformed-source.ts";
+import { withTransformedSource, compareTransformedExecution } from "./transformed-source.ts";
 import { lowerNullable, referenceRead } from "../src/lower/nullish.ts";
 
 function check(input: string, transform = true): string {
@@ -243,4 +243,32 @@ test("nullable applications retain value contexts, effectful helpers and generat
     helper + ' let current = apply; current = <T,R>(_value:T|null,_use:(value:T)=>R):R|null => null; function run(value:{flag:boolean}|null):boolean { return !!(current(value,item=>item.flag) ?? null); }'
   ];
   for (const source of sources) withTransformedSource(source, (input, checker) => lowerNullable(input, checker).text, (_file, output) => assert.equal(output, source));
+});
+
+
+test("guarded result fallbacks preserve calls, errors, argument order and present falsy values", () => {
+  const source = `const events:string[]=[];
+function checked<T>(value:T|null,label:string):T { events.push("helper:"+label); if(value===null)throw new Error("missing"); return value; }
+function label():string { events.push("label"); return "value"; }
+function fallback():number { events.push("fallback"); return 99; }
+function run(value:number|null|undefined):string {
+  try { const result=checked(value??null,label())??fallback(); return Object.is(result,-0)?"-0":String(result); }
+  catch(error) { return error instanceof Error?error.message:"other"; }
+}
+console.log(JSON.stringify([[null,undefined,0,-0,7,NaN,Infinity].map(run),events]));`;
+  const output=compareTransformedExecution(source,(input,checker)=>lowerNullable(input,checker).text).text;
+  assert.doesNotMatch(output,/\?\? fallback\(\)/);
+});
+
+test("return annotations, unchecked assertions and rebound helpers do not prove a present result", { timeout: 30000 }, () => {
+  const helper='function checked<T>(value:T|null):T { if(value===null)throw new Error("missing"); return value; }';
+  const sources=[
+    helper+' function run(value:string):string { return checked(value)??"fallback"; }',
+    'function identity<T>(value:T):T { return value; } function run(value:string):string { return identity(value??null)??"fallback"; }',
+    'function checked<T>(value:T|null):T { if(value===null)throw new Error("missing"); eval("value=null"); return value; } function run(value:string|null):string { return checked(value??null)??"fallback"; }',
+    'function unchecked<T>(value:T|null):T { return value!; } function run(value:string|null):string { return unchecked(value??null)??"fallback"; }',
+    'function unchecked<T>(value:T|null):T { if(value===null)return null as T; return value; } function run(value:string|null):string { return unchecked(value??null)??"fallback"; }',
+    helper+' let use=checked; use=<T>(value:T|null):T=>null as T; function run(value:string|null):string { return use(value??null)??"fallback"; }'
+  ];
+  for(const source of sources) withTransformedSource(source,(input,checker)=>lowerNullable(input,checker).text,(_file,output)=>assert.equal(output,source));
 });

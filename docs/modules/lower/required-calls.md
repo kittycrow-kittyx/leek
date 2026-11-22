@@ -7,3 +7,5 @@ The nullable parameter must be read-only. Its uses are limited to null tests and
 `nullTest(node, symbol, checker)` identifies equality or inequality comparisons between the selected parameter and null. Specialisation replaces those tests with a separate presence bit.
 
 Helper modules with cyclic or unresolved import dependencies retain their original calls. Functions can be invoked during cyclic module initialisation before a generated namespace is initialised.
+
+`requiredResult(call, checker)` verifies that every normal return is the helper’s guarded first parameter. The argument must explicitly coalesce undefined to null, and the helper binding must remain unchanged. Nullable lowering can then remove a result fallback while retaining the original call and its errors. Helpers returning another value or using unchecked non-null assertions do not qualify.

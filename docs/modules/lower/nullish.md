@@ -32,3 +32,5 @@ Standard string `codePointAt(index)` defaults reuse the same captured index and 
 Standard library interfaces derived from Array, including regular-expression match arrays, share reference-array index handling. Missing captures select the fallback and empty captures remain present. User-defined array-like classes retain their original expressions. This does not supply a native regular-expression engine.
 
 Nullable predicate applications used only as conditions can inline a proven guard-and-callback helper. The [application analysis](application.md) verifies the original helper body and preserves predicate timing without storing a nullable Boolean.
+
+A verified checked-helper result can omit its unreachable fallback. The shared consumer analysis requires an explicit nullish argument boundary and proves that normal returns contain only the guarded input. Ordinary call return annotations alone are insufficient.

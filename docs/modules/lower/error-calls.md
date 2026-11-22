@@ -6,4 +6,4 @@ A helper must be a top-level private function in a module, with fixed named prim
 
 Function values, export aliases, shorthand escapes, recursive calls, globals captured by the helper, generic or optional parameters, function-scoped var bindings, named type scopes, dynamic evaluation, async callers and catches observing stack metadata retain their original functions. Standard Error bindings must stay visible at the call and catch scopes. A function is removed only after all its references qualify; this preserves externally observable function identity.
 
-The next checking programme resolves the inlined bindings before `lowerLocalExceptions` proves and lowers the catch. Native success paths need no outcome wrapper or exception context. General calls, imported helpers, non-tail positions, asynchronous rejection and custom thrown domains remain for further lowering.
+`lowerLocalExceptions` runs after a new checker resolves the substituted bindings. General calls, imported helpers, non-tail positions, asynchronous rejection and custom thrown domains remain for further lowering.

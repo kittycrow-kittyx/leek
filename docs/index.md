@@ -7,6 +7,7 @@ Install the pinned dependencies and run `bun run build` before changing the lowe
 - [Numeric lowering](modules/lower/numeric.md)
 - [WASM source lowering](modules/lower/wasm.md)
 - [Native platform probes](modules/lower/platform.md)
+- [Bake nullable selection](modules/lower/bake-nullable.md)
 - [Nullable expression extension](modules/lower/nullish.md)
 - [Staged WASM preparation](modules/lower/prepare-wasm.md)
 - [Closed error helper calls](modules/lower/error-calls.md)

@@ -4,4 +4,4 @@
 
 `functionOwner(node)` returns the nearest enclosing function-like node, or null outside a function. Capture, native storage, platform and local exception analysis share this scope check.
 
-`abruptCompletion(statement)` conservatively proves that normal control leaves through a return, throw, break or continue. Both branches of an if must exit. An explicit exit in a block makes its following statements unreachable; loops alone do not prove completion. Closed helper calls and local catch lowering share this query.
+`abruptCompletion(statement)` returns true for explicit exits. An if requires both branches to exit; blocks require an unconditional exit. Loops return false. Closed helper calls and local catch lowering share this query.
