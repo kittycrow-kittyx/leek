@@ -60,8 +60,8 @@ function checkNumbers(exports: WebAssembly.Exports): void {
     for (const value of [0, -0, NaN, 7]) assert.equal(call(exports, "optionalMapEquality", present, value), reference.optionalMapEquality(present, value));
   }
   const caught = { localCaught: reference.localCaught, localReturn: reference.localReturn, localIgnored: reference.localIgnored, localNested: reference.localNested,
-    tailError: reference.tailError, otherTailError: reference.otherTailError, voidTailError: reference.voidTailError };
-  for (const [name, operation] of Object.entries(caught)) for (const input of [-Infinity, -7, -0, 0, 1, 4, Infinity, NaN]) assert.equal(call(exports, name, input), operation(input));
+    tailError: reference.tailError, otherTailError: reference.otherTailError, voidTailError: reference.voidTailError, inspectClosedError: reference.inspectClosedError };
+  for (const [name, operation] of Object.entries(caught)) for (const input of [-Infinity, -7, -1, -0, 0, 1, 4, Infinity, NaN]) assert.equal(call(exports, name, input), operation(input));
   const operations = { multiply: reference.multiply, xor: reference.xor, and: reference.and, or: reference.or,
     shl: reference.shl, shr: reference.shr, ushr: reference.ushr };
   const values = numericCases();

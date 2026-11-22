@@ -3,20 +3,41 @@ import { nativeVariable } from "../../baguette/src/ast.ts";
 import { identifiers } from "./names.ts";
 import { localCatch } from "./exception-facts.ts";
 import { abruptCompletion } from "./function-body.ts";
-import { catchBindings } from "./catch-bindings.ts";
+import { catchBindings, errorString } from "./catch-bindings.ts";
+import { unwrap } from "./integers.ts";
+import { valueSymbol } from "./captures.ts";
+
+function errorConversions(statement: ts.Statement, known: ReadonlySet<ts.Symbol>, checker: ts.TypeChecker, context: ts.TransformationContext): ts.Statement {
+  const f = ts.factory;
+  const visit: ts.Visitor<ts.Node, ts.Node> = node => {
+    const argument = errorString(node, checker);
+    const value = argument ? unwrap(argument) : null;
+    const symbol = value && ts.isIdentifier(value) ? valueSymbol(value, checker) : null;
+    if (value && symbol && known.has(symbol)) return f.createCallExpression(f.createPropertyAccessExpression(value, "toString"), [], []);
+    return ts.visitEachChild(node, visit, context);
+  };
+  return ts.visitNode(statement, visit, ts.isStatement) ?? statement;
+}
 
 /** Fold aliases only after the throw-domain proof; the discarded normalisation fallback was unreachable in the original programme. */
 function catchBody(clause: ts.CatchClause, checker: ts.TypeChecker, context: ts.TransformationContext, visit: ts.Visitor<ts.Node, ts.Node>): ts.Statement[] {
   const aliases = catchBindings(clause, checker);
   if (!aliases) throw new Error("Missing closed catch binding proof");
   const f = ts.factory;
+  const variable = clause.variableDeclaration ?? null;
+  const names = [variable ? variable.name : null, ...[...aliases.keys()].map(declaration => declaration.name)];
+  const known = new Set(names.flatMap(name => {
+    const symbol = name && ts.isIdentifier(name) ? valueSymbol(name, checker) : null;
+    return symbol ? [symbol] : [];
+  }));
   return clause.block.statements.map(statement => {
-    if (!ts.isVariableStatement(statement)) return ts.visitNode(statement, visit, ts.isStatement) ?? statement;
+    if (!ts.isVariableStatement(statement)) return ts.visitNode(errorConversions(statement, known, checker, context), visit, ts.isStatement) ?? statement;
     const declarations = statement.declarationList.declarations.map(declaration => {
       const value = aliases.get(declaration) ?? null;
       return value ? nativeVariable(declaration.name, f.createTypeReferenceNode("Error"), value) : ts.visitEachChild(declaration, visit, context);
     });
-    return f.updateVariableStatement(statement, statement.modifiers ?? [], f.updateVariableDeclarationList(statement.declarationList, declarations));
+    const output = f.updateVariableStatement(statement, statement.modifiers ?? [], f.updateVariableDeclarationList(statement.declarationList, declarations));
+    return errorConversions(output, known, checker, context);
   });
 }
 

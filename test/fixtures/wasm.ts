@@ -377,3 +377,12 @@ function useCheckedVoid(input: number): void {
   tailReached += 7;
 }
 export function voidTailError(input: number): number { tailReached = 0; useCheckedVoid(input); return tailReached; }
+
+
+export function inspectClosedError(input: number): number {
+  try { if (input < 0) throw new Error(input === -1 ? "" : "negative"); return 0; }
+  catch (caughtValue) {
+    const error = caughtValue instanceof Error ? caughtValue : new Error("fallback");
+    return (typeof error === "object" ? 1 : 0) + error.name.length + error.toString().length + String(error).length;
+  }
+}

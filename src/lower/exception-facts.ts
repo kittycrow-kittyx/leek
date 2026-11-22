@@ -10,7 +10,10 @@ function errorValue(node: ts.Expression, checker: ts.TypeChecker): boolean {
   if (!ts.isNewExpression(node) || !ts.isIdentifier(node.expression) || node.expression.text !== "Error" || !librarySymbol(checker.getSymbolAtLocation(node.expression) ?? null)) return false;
   const symbol = checker.getSymbolAtLocation(node.expression) ?? null;
   if (!symbol || parameterWritten(node.getSourceFile(), symbol, checker)) return false;
-  return (node.arguments ?? []).length <= 1 && (node.arguments ?? []).every(argument => Boolean(checker.getTypeAtLocation(argument).flags & ts.TypeFlags.StringLike));
+  return (node.arguments ?? []).length <= 1 && (node.arguments ?? []).every(argument => {
+    const type = checker.getTypeAtLocation(argument);
+    return (type.isUnion() ? type.types : [type]).every(part => Boolean(part.flags & ts.TypeFlags.StringLike));
+  });
 }
 
 function localIdentifier(node: ts.Identifier, scope: ts.Node, checker: ts.TypeChecker): boolean {

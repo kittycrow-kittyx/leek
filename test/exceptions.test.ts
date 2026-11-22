@@ -75,6 +75,7 @@ test("Error aliases exposing metadata, escaping or changing identity retain thei
   const alias='const error=caughtValue instanceof Error?caughtValue:new Error("other");';
   const sources=[
     head+alias+' return error.stack?.length??0; } }',
+    head+alias+' return eval("error.stack.length"); } }',
     head+alias+' const object={error}; return String(object.error).length; } }',
     head+alias+' error.message="changed"; return error.message.length; } }',
     head+alias+' let copy=error; copy=new Error("new"); return copy.message.length; } }',

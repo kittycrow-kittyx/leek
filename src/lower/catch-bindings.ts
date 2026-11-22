@@ -2,6 +2,13 @@ import ts from "typescript";
 import { librarySymbol, unwrap } from "./integers.ts";
 import { parameterWritten, valueSymbol } from "./captures.ts";
 
+/** Identify the standard one-argument String conversion before replacing it with the proved Error's native method. */
+export function errorString(node: ts.Node, checker: ts.TypeChecker): ts.Expression | null {
+  if (!ts.isCallExpression(node) || node.arguments.length !== 1 || !ts.isIdentifier(node.expression) || node.expression.text !== "String" ||
+    !librarySymbol(checker.getSymbolAtLocation(node.expression) ?? null)) return null;
+  return node.arguments[0] ?? null;
+}
+
 /** A proven Error needs no fallback normalisation; retain only a direct alias or the true arm of its standard instance test. */
 function aliasValue(initializer: ts.Expression, known: ReadonlySet<ts.Symbol>, checker: ts.TypeChecker): ts.Expression | null {
   const value = unwrap(initializer);
@@ -29,7 +36,7 @@ function caughtRead(node: ts.Identifier, checker: ts.TypeChecker): boolean {
     const constructor = unwrap(parent.right);
     return ts.isIdentifier(constructor) && ["Error", "RangeError", "TypeError", "SyntaxError", "URIError"].includes(constructor.text) && librarySymbol(checker.getSymbolAtLocation(constructor) ?? null);
   }
-  return ts.isCallExpression(parent) && parent.arguments.length === 1 && (parent.arguments[0] ?? null) === value && ts.isIdentifier(parent.expression) && parent.expression.text === "String" && librarySymbol(checker.getSymbolAtLocation(parent.expression) ?? null);
+  return errorString(parent, checker) === value;
 }
 
 /** Track only read-only aliases in the catch's own block; var bindings and outer assignments could export the object. */
@@ -61,6 +68,7 @@ export function catchBindings(clause: ts.CatchClause, checker: ts.TypeChecker): 
   let valid = true;
   const scan = (node: ts.Node): void => {
     if (ts.isVariableDeclaration(node) && aliases.has(node)) return;
+    if (ts.isIdentifier(node) && ["eval", "Function"].includes(node.text)) valid = false;
     const declaration = ts.isVariableDeclaration(node) || ts.isBindingElement(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) ? node.name ?? null : null;
     if (declaration && ts.isIdentifier(declaration) && declaration.text === variable.name.getText()) valid = false;
     const reference = ts.isIdentifier(node) ? valueSymbol(node, checker) : null;
