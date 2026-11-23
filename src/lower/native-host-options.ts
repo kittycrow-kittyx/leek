@@ -12,6 +12,13 @@ const hostImports = [
   'export type { KernelOptions } from "./host-options.js";',
 ];
 
+function isImplicitKernelConstruction(node: ts.Node): boolean {
+  if (!ts.isNewExpression(node)) return false;
+  if (!ts.isIdentifier(node.expression) || node.expression.text !== "Kern") return false;
+  const args = node.arguments ?? null;
+  return args === null || args.length === 0;
+}
+
 /**
  * The mikuOS kernel constructor always receives explicit network/WASI options.
  * Rebind only Thistle's unused implicit *host* default to the canonical
@@ -53,8 +60,7 @@ export function bindNativeKernelOptions(input: LoweredProject): boolean {
   for (const file of program.getSourceFiles()) {
     if (file.isDeclarationFile) continue;
     const visit = (node: ts.Node): void => {
-      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) &&
-          node.expression.text === "Kern" && (!node.arguments || node.arguments.length === 0)) {
+      if (isImplicitKernelConstruction(node)) {
         throw new Error("Implicit Kern() construction is not supported by the native host-options boundary: " + file.fileName);
       }
       ts.forEachChild(node, visit);

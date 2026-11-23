@@ -10,6 +10,7 @@ Install the pinned dependencies and run `bun run build` before changing the lowe
 - [Bake nullable selection](modules/lower/bake-nullable.md)
 - [Nullable expression extension](modules/lower/nullish.md)
 - [Staged WASM preparation](modules/lower/prepare-wasm.md)
+- [Explicit mikuOS kernel host binding](modules/lower/native-host-options.md)
 - [Closed catch bindings](modules/lower/catch-bindings.md)
 - [Error propagation facts](modules/lower/error-domain.md)
 - [Native exception regions](modules/lower/native-exceptions.md)
