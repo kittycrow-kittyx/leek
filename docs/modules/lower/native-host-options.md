@@ -22,6 +22,5 @@ Original pinned source files and canonical checksums are unchanged.
 The target's replacement `defaultKernelOptions` is fail-closed: it throws if
 called. No fake network, alternate kernel or permissive fallback is introduced.
 
-This pass addresses one genuine host-only dependency edge. It does not remove
-the remaining hosted process/VM/assembler graph or guarantee successful Bake,
-WebAssembly compilation or boot. The compiler retains fail-on-warnings.
+Bake's other diagnostics remain subject to the existing fail-on-warnings
+policy.
