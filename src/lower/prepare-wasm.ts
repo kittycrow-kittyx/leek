@@ -9,6 +9,7 @@ import { lowerClosures } from "./closures.ts";
 import { lowerRequired } from "./required.ts";
 import { lowerPlatform } from "./platform.ts";
 import { exceptionReference, lowerNativeExceptions } from "./native-exceptions.ts";
+import { bindNativeKernelOptions } from "./native-host-options.ts";
 
 const intrinsicFile = "__leek_wasm_intrinsics.ts";
 
@@ -40,6 +41,7 @@ function intrinsicPath(file: ts.SourceFile, intrinsic: string): string {
 /** Apply the WASM extension to the staged graph before Baguette's mandatory Bake stage. */
 export function prepareWasmSource(input: LoweredProject, preserved: readonly string[] = []): string[] {
   const graph = stagedGraph(input, preserved);
+  bindNativeKernelOptions(input);
   const intrinsic = resolve(graph.root, intrinsicFile);
   const references = new Set<string>();
   let intrinsicWritten = false;
