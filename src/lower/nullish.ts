@@ -217,18 +217,26 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
         return ts.visitNode(node.right, visit, ts.isExpression) ?? node.right;
       }
       const nullable = parts.some(part => Boolean(part.flags & ts.TypeFlags.Null));
-      const reference = parts.every(part => Boolean(part.flags & (ts.TypeFlags.Null | ts.TypeFlags.StringLike | ts.TypeFlags.Object)));
+      const undefinedReference = !nullable && parts.some(part => Boolean(part.flags & ts.TypeFlags.Undefined));
+      const reference = parts.every(part => Boolean(part.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.StringLike | ts.TypeFlags.Object)));
       const annotation = checker.typeToTypeNode(type, node, ts.NodeBuilderFlags.NoTruncation) ?? null;
-      if (ts.isIdentifier(operand) || ts.isLiteralExpression(operand) || !nullable || !reference || !annotation || !resultType) {
+      const repeatable = ts.isIdentifier(operand) || ts.isLiteralExpression(operand);
+      if (!reference || !annotation || !resultType || !(nullable || undefinedReference) || (repeatable && !undefinedReference)) {
         return ts.visitEachChild(node, visit, context);
       }
+      // Null and undefined have identical selection semantics for ??, but
+      // empty strings and other present references must remain untouched.
       const cache = fresh();
       scope.push(nativeVariable(cache, annotation, null));
       changed = true;
       const left = ts.visitNode(node.left, visit, ts.isExpression) ?? node.left;
       const right = ts.visitNode(node.right, visit, ts.isExpression) ?? node.right;
+      const selected = undefinedReference ? factory.createConditionalExpression(
+        factory.createBinaryExpression(cache, factory.createToken(ts.SyntaxKind.EqualsEqualsToken), factory.createNull()),
+        factory.createToken(ts.SyntaxKind.QuestionToken), right, factory.createToken(ts.SyntaxKind.ColonToken), cache
+      ) : bakeNullable(source, checker, cache, type, right);
       const expression = factory.createParenthesizedExpression(factory.createCommaListExpression([
-        factory.createAssignment(cache, left), bakeNullable(source, checker, cache, type, right)
+        factory.createAssignment(cache, left), selected
       ]));
       return factory.createSatisfiesExpression(expression, resultType);
     };

@@ -272,3 +272,42 @@ test("return annotations, unchecked assertions and rebound helpers do not prove 
   ];
   for(const source of sources) withTransformedSource(source,(input,checker)=>lowerNullable(input,checker).text,(_file,output)=>assert.equal(output,source));
 });
+
+test("undefined-only references lower without losing lazy side effects or present empty strings", () => {
+  const source = `const events: string[] = [];
+const records: Array<{ name?: string }> = [{ name: "" }, { name: "present" }, {}, { name: undefined }];
+function get(index: number): { name?: string } { events.push("get:" + index); return records[index]!; }
+function fallback(): string { events.push("fallback"); return "missing"; }
+function run(index: number): string { return get(index).name ?? fallback(); }
+console.log(JSON.stringify([[0,1,2,3].map(run), events]));`;
+  const transformed = withTransformedSource(source, (input, checker) => lowerNullable(input, checker).text,
+    (_file, output) => { assert.match(output, /__leekNullable/); assert.doesNotMatch(output, /\.name\s*\?\?/); });
+  assert.ok(transformed);
+  assert.equal(check(source), check(source, false));
+});
+
+test("reference defaults preserve nullish chains, absent map keys and stored undefined", () => {
+  const source = `const trace: string[] = [];
+const map = new Map<string, string | undefined>([["empty", ""], ["stored", undefined], ["value", "yes"]]);
+function lookup(key: string): string | undefined { trace.push("lookup:" + key); return map.get(key); }
+function second(): string | undefined { trace.push("second"); return undefined; }
+function fallback(): string { trace.push("fallback"); return "missing"; }
+function run(key: string): string { return lookup(key) ?? second() ?? fallback(); }
+console.log(JSON.stringify([["empty","stored","value","unknown"].map(run), trace]));`;
+  assert.equal(check(source), check(source, false));
+});
+
+test("undefined optional primitives and generic callbacks keep their original lowering boundary", () => {
+  const source = `function primitive(value: number | undefined): number { return value ?? 7; }
+function generic<T>(value: T | undefined, fallback: T): T { return value ?? fallback; }
+function mixed(value: string | null | undefined): string { return value ?? "missing"; }`;
+  const root = mkdtempSync(join(tmpdir(), "leek-nullable-unsupported-"));
+  try {
+    const file = join(root, "entry.ts");
+    writeFileSync(file, source);
+    const program = ts.createProgram([file], { strict: true, types: [], target: ts.ScriptTarget.ES2022 });
+    const input = program.getSourceFile(file) ?? null;
+    assert.ok(input);
+    assert.equal(lowerNullable(input, program.getTypeChecker()).text, source);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
