@@ -161,3 +161,35 @@ function missing(values:Map<number,number>,key:number):boolean { return (values.
 console.log(run([],0),loose(new Uint8Array([0]),0),missing(new Map(),0));`;
   assert.equal(transform(input, "export {};").text, input);
 });
+
+test("String conversion of optional typed-array values preserves null, zero and evaluation order", () => {
+  const input = `export {};
+const events: string[] = [];
+const values = new BigInt64Array([0n, -1n, 9223372036854775807n, -9223372036854775808n]);
+function receiver(): BigInt64Array { events.push("receiver"); return values; }
+function key(n: number): number { events.push("key:" + String(n)); return n; }
+function run(n: number): string { return String(receiver()[key(n)] ?? null); }
+console.log(JSON.stringify([[-2,-1,-0,0,0.5,1,2,3,4,NaN,Infinity].map(run),events]));`;
+  const lowered = transform(input, "export {};");
+  assert.doesNotMatch(lowered.text, /\?\? null/);
+  assert.match(lowered.text, /satisfies string/);
+  assert.match(lowered.text, /LeekRequiredIndex/);
+});
+
+test("optional primitive stringification respects shadowed String and existing source evaluation", () => {
+  const source = `export {};
+function run(String: (value: bigint | null) => string, values: BigInt64Array, index: number): string {
+  return String(values[index] ?? null);
+}
+console.log(run(value => value === null ? "missing" : value.toString(), new BigInt64Array([0n]), 2));`;
+  assert.equal(transform(source, "export {};").text, source);
+});
+
+test("optional numeric typed-array strings distinguish missing entries from signed zero and NaN", () => {
+  const source = `export {};
+const values = new Float64Array([0, -0, NaN, Infinity, -7]);
+function run(n: number): string { return String(values[n] ?? null); }
+console.log(JSON.stringify([-1,0,1,2,3,4,5,0.5,NaN,Infinity].map(run)));`;
+  const output = transform(source, "export {};");
+  assert.match(output.text, /satisfies string/);
+});

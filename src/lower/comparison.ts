@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { unwrap } from "./integers.ts";
+import { librarySymbol, unwrap } from "./integers.ts";
 import { primitiveRead, type PrimitiveRead } from "./primitive-read.ts";
 
 interface CapturedRead { effects: ts.Expression[]; value: ts.Expression; present: ts.Identifier }
@@ -31,4 +31,32 @@ export function optionalComparison(node: ts.Node, checker: ts.TypeChecker, captu
   return f.createSatisfiesExpression(f.createParenthesizedExpression(f.createCommaListExpression([
     ...(readOnLeft ? [...effects, ...operand] : [...operand, ...effects]), result
   ])), f.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword));
+}
+
+/** String(...) consumes a missing typed-array primitive as "null", without boxing the optional value. */
+export function optionalStringification(
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  capture: (read: PrimitiveRead) => CapturedRead,
+): ts.Expression | null {
+  if (!ts.isCallExpression(node) || node.arguments.length !== 1 || !ts.isIdentifier(node.expression) ||
+      node.expression.text !== "String" || (node.questionDotToken ?? null)) return null;
+  if (!librarySymbol(checker.getSymbolAtLocation(node.expression) ?? null)) return null;
+  const argument = unwrap(node.arguments[0] ?? node.expression);
+  if (!ts.isBinaryExpression(argument) || argument.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken ||
+      unwrap(argument.right).kind !== ts.SyntaxKind.NullKeyword) return null;
+  const read = primitiveRead(argument.left, checker);
+  if (!read || read.kind === "map") return null;
+  const f = ts.factory;
+  const snapshot = capture(read);
+  const present = f.createCallExpression(node.expression, [], [snapshot.value]);
+  const output = f.createConditionalExpression(
+    snapshot.present,
+    f.createToken(ts.SyntaxKind.QuestionToken), present,
+    f.createToken(ts.SyntaxKind.ColonToken), f.createStringLiteral("null"),
+  );
+  return f.createSatisfiesExpression(
+    f.createParenthesizedExpression(f.createCommaListExpression([...snapshot.effects, output])),
+    f.createKeywordTypeNode(ts.SyntaxKind.StringKeyword),
+  );
 }
