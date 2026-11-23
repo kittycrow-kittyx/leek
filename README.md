@@ -11,6 +11,12 @@ The production source is `mikuOS-thistle/src/main/boot.ts` and its transitive
 graph, including the canonical Thistle kernel and inherited ThistleASM.
 Leek stages that graph without maintaining another kernel or userspace source tree.
 
+That boot graph currently imports Thistle’s hosted kernel adapter. Teto builds
+the native `src/native/kernel.ts` entry points with Baguette’s Teto intrinsics.
+Leek preserves matching pinned native modules and supplies those same intrinsic,
+ABI and memory bindings. Integrating the remaining hosted OS interfaces into
+the native build is still required.
+
 ## Targets
 
 | Target | Compiler | Output |

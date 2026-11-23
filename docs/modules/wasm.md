@@ -9,3 +9,5 @@ The process uses imported linear memory, the incremental AssemblyScript runtime 
 The WASM extension selects Baguette’s pinned baseline prelude when `mulU32` is required. Leek supplies the TypeScript reference contract through `intrinsicModules`; it does not emit its own native multiplication routine.
 
 The same intrinsic module mechanism binds the AssemblyScript F64 methods and NativeMath coercion operation. The [integer facts](lower/integers.md) provide the conditions for using native storage and multiplication. No WASM predicate or numeric coercion implementation is supplied by Leek.
+
+For a matching pinned Thistle kernel, [native configuration](thistle-wasm.md) preserves upstream native modules and binds their existing Teto intrinsics, numeric ABI aliases and memory policy before Baguette emission.

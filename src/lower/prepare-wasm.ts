@@ -12,20 +12,20 @@ import { exceptionReference, lowerNativeExceptions } from "./native-exceptions.t
 
 const intrinsicFile = "__leek_wasm_intrinsics.ts";
 
-interface StagedGraph { files: string[]; options: ts.CompilerOptions; root: string }
+interface StagedGraph { files: string[]; options: ts.CompilerOptions; root: string; preserved: ReadonlySet<string> }
 
-function stagedGraph(input: LoweredProject): StagedGraph {
+function stagedGraph(input: LoweredProject, preserved: readonly string[]): StagedGraph {
   const config = ts.readJsonConfigFile(input.project, ts.sys.readFile);
   const parsed = ts.parseJsonSourceFileConfigFileContent(config, ts.sys, dirname(input.project), {}, input.project);
   if (parsed.errors.length) throw new Error(parsed.errors.map(error => ts.flattenDiagnosticMessageText(error.messageText, "\n")).join("\n"));
-  return { files: parsed.fileNames, options: parsed.options, root: resolve(dirname(input.project), "source") };
+  return { files: parsed.fileNames, options: parsed.options, root: resolve(dirname(input.project), "source"), preserved: new Set(preserved) };
 }
 
 /** Each phase resolves the previous phase's written source and validates every path before rewriting a file. */
 function rewriteGraph(graph: StagedGraph, lower: (file: ts.SourceFile, checker: ts.TypeChecker, files: ts.SourceFile[]) => string, exclude = ""): void {
   const program = ts.createProgram(graph.files, graph.options);
   const checker = program.getTypeChecker();
-  const files = stagedFiles(program, graph.root).filter(file => file.fileName !== exclude);
+  const files = stagedFiles(program, graph.root).filter(file => file.fileName !== exclude && !graph.preserved.has(file.fileName));
   for (const file of files) {
     const output = lower(file, checker, files);
     if (output !== file.text) writeFileSync(file.fileName, output);
@@ -38,8 +38,8 @@ function intrinsicPath(file: ts.SourceFile, intrinsic: string): string {
 }
 
 /** Apply the WASM extension to the staged graph before Baguette's mandatory Bake stage. */
-export function prepareWasmSource(input: LoweredProject): string[] {
-  const graph = stagedGraph(input);
+export function prepareWasmSource(input: LoweredProject, preserved: readonly string[] = []): string[] {
+  const graph = stagedGraph(input, preserved);
   const intrinsic = resolve(graph.root, intrinsicFile);
   const references = new Set<string>();
   let intrinsicWritten = false;
@@ -59,7 +59,7 @@ export function prepareWasmSource(input: LoweredProject): string[] {
   rewriteGraph(graph, (file, checker) => lowerNullable(file, checker).text, intrinsic);
   const program = ts.createProgram(graph.files, graph.options);
   const checker = program.getTypeChecker();
-  for (const [file, text] of lowerRequired(stagedFiles(program, graph.root).filter(file => file.fileName !== intrinsic), checker)) {
+  for (const [file, text] of lowerRequired(stagedFiles(program, graph.root).filter(file => file.fileName !== intrinsic && !graph.preserved.has(file.fileName)), checker)) {
     if (text !== readFileSync(file, "utf8")) writeFileSync(file, text);
   }
   rewriteGraph(graph, (file, checker, files) => {

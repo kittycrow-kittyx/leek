@@ -11,6 +11,7 @@ import { nativeWidths } from "./lower/integers.ts";
 import { nullableAliases } from "./lower/nullish.ts";
 import { requiredAliases } from "./lower/required.ts";
 import { wasmCompiler, wasmPrelude } from "./wasm-compiler.ts";
+import { thistleWasm } from "./thistle-wasm.ts";
 
 const sourceManifest: (text: string) => SourceManifest = JSON.parse;
 const watLayout: (text: string) => WatLayout = JSON.parse;
@@ -18,21 +19,23 @@ const watLayout: (text: string) => WatLayout = JSON.parse;
 /** Use the released Baguette entry point until its emitter is available as a reusable API. */
 export function emitWasm(compiler: string, input: LoweredProject, outputDir: string): void {
   const config = resolve(dirname(input.project), "baguette.config.json");
-  const intrinsicModules = prepareWasmSource(input);
+  const thistle = thistleWasm(compiler, input);
+  const intrinsicModules = prepareWasmSource(input, thistle.preservedModules);
   const abi = prepareWasmAbi(input);
   json(config, {
     schema: 1,
     name: "Leek",
     project: input.project,
     ...abi,
-    intrinsicModules,
+    intrinsicModules: [...thistle.intrinsicModules, ...intrinsicModules],
     preludeFile: wasmPrelude(compiler, dirname(input.project)),
-    typeAliases: { ...abi.typeAliases, ...nativeWidths, ...nullableAliases, ...requiredAliases },
+    abiTypes: { ...thistle.abiTypes, ...abi.abiTypes },
+    typeAliases: { ...thistle.typeAliases, ...abi.typeAliases, ...nativeWidths, ...nullableAliases, ...requiredAliases },
     generatedDir: resolve(outputDir, "wat"),
     outDir: outputDir,
     moduleBaseName: "leek",
     abi: { exports: "all-exported-functions" },
-    memory: { initialPages: 1024, maximumPages: 32768, import: true, export: false },
+    memory: { ...(thistle.memory ?? { initialPages: 1024, maximumPages: 32768 }), import: true, export: false },
     runtime: "incremental",
     variants: [{ name: "leek", threaded: false }],
     allowedHostImports: [

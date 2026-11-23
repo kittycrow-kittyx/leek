@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { test } from "node:test";
+import { THISTLE_WASM_INITIAL_PAGES, THISTLE_WASM_MAXIMUM_PAGES } from "../mikuOS-thistle/thistle/src/core/kernel-memory.js";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -190,5 +191,31 @@ test("compiled WASM preserves numeric semantics, native closures, rooted buffers
       assert.throws(() => reference.bufferViewLength(offset, length), RangeError);
       assert.throws(() => call(instance.exports, "bufferViewLength", offset, length));
     }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test("Leek preserves and builds the pinned native Thistle kernel through inherited Teto intrinsics", { timeout: 120000 }, () => {
+  const root = mkdtempSync(join(tmpdir(), "leek-thistle-"));
+  try {
+    const canonical = join(repository, "mikuOS-thistle/thistle");
+    const entry = join(canonical, "src/native/kernel.ts");
+    const original = readFileSync(entry, "utf8");
+    const input = stageSource(canonical, entry, join(root, "work"), false);
+    emitWasm(requirePin(repository, "baguette"), input, join(root, "output"));
+    assert.equal(readFileSync(input.entry, "utf8"), original, "native kernel source reaches Bake without Leek's JavaScript numeric rewrites");
+    assert.equal(readFileSync(entry, "utf8"), original);
+    const bytes = readFileSync(join(root, "output/leek.wasm"));
+    const linked = join(root, "linked.wat"), rebuilt = join(root, "rebuilt.wasm");
+    writeFileSync(linked, linkWat(join(root, "output/wat/leek/layout.json")));
+    execFileSync(process.execPath, [join(repository, "baguette/node_modules/.bin/wasm-opt"), linked,
+      "-O3", "--all-features", "--strip-debug", "-o", rebuilt]);
+    assert.deepEqual(readFileSync(rebuilt), bytes);
+    const memory = new WebAssembly.Memory({ initial: THISTLE_WASM_INITIAL_PAGES, maximum: THISTLE_WASM_MAXIMUM_PAGES });
+    const module = new WebAssembly.Module(bytes);
+    assert.deepEqual(WebAssembly.Module.imports(module).map(item => item.module + "." + item.name), ["env.memory"]);
+    const instance = new WebAssembly.Instance(module, { env: { memory } });
+    assert.equal(call(instance.exports, "thistleKernelInit", 0, 1, 0), 0);
+    assert.equal(call(instance.exports, "thistleKernelValid", 0), 1);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
