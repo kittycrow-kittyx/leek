@@ -4,6 +4,12 @@ import { fileURLToPath } from "node:url";
 import { json } from "./project.ts";
 import { viewPrelude } from "./lower/views.ts";
 import { exceptionPrelude } from "./lower/native-exceptions.ts";
+import { nativeWidths } from "./lower/integers.ts";
+import { nullableAliases } from "./lower/nullish.ts";
+import { requiredAliases } from "./lower/required.ts";
+
+/** Type bindings paired with the compiler prelude and intrinsic reference modules. */
+export const wasmTypeAliases = { ...nativeWidths, ...nullableAliases, ...requiredAliases };
 
 /** Alias inherited native operations and supply the exception marker contracts. */
 export function wasmPrelude(compiler: string, work: string): string {

@@ -7,10 +7,7 @@ import type { LoweredProject, SourceManifest } from "./lower/index.ts";
 import type { WatLayout } from "../baguette/src/wat-modules.ts";
 import { prepareWasmAbi } from "./wasm-abi.ts";
 import { prepareWasmSource } from "./lower/prepare-wasm.ts";
-import { nativeWidths } from "./lower/integers.ts";
-import { nullableAliases } from "./lower/nullish.ts";
-import { requiredAliases } from "./lower/required.ts";
-import { wasmCompiler, wasmPrelude } from "./wasm-compiler.ts";
+import { wasmCompiler, wasmPrelude, wasmTypeAliases } from "./wasm-compiler.ts";
 import { thistleWasm } from "./thistle-wasm.ts";
 
 const sourceManifest: (text: string) => SourceManifest = JSON.parse;
@@ -30,7 +27,7 @@ export function emitWasm(compiler: string, input: LoweredProject, outputDir: str
     intrinsicModules: [...thistle.intrinsicModules, ...intrinsicModules],
     preludeFile: wasmPrelude(compiler, dirname(input.project)),
     abiTypes: { ...thistle.abiTypes, ...abi.abiTypes },
-    typeAliases: { ...thistle.typeAliases, ...abi.typeAliases, ...nativeWidths, ...nullableAliases, ...requiredAliases },
+    typeAliases: { ...thistle.typeAliases, ...abi.typeAliases, ...wasmTypeAliases },
     generatedDir: resolve(outputDir, "wat"),
     outDir: outputDir,
     moduleBaseName: "leek",
