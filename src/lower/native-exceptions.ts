@@ -88,10 +88,9 @@ export function lowerNativeExceptions(source: ts.SourceFile, checker: ts.TypeChe
       const narrowed = property(node);
       if (narrowed) return narrowed;
       if (ts.isThrowStatement(node) && domain(node)) {
-        const scope = functionOwner(node);
         const stop = call("unreachable");
         return f.createBlock([f.createExpressionStatement(call("LeekRaise", [ts.visitNode(node.expression, visit, ts.isExpression) ?? node.expression])),
-          scope && ts.isGetAccessorDeclaration(scope) ? f.createReturnStatement(stop) : f.createExpressionStatement(stop)], true);
+          f.createReturnStatement(stop)], true);
       }
       return ts.visitEachChild(node, visit, context);
     };

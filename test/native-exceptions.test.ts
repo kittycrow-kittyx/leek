@@ -45,3 +45,17 @@ test("arbitrary thrown values, unknown callbacks, mutation and recursive uncerta
   ];
   for (const source of cases) withTransformedSource(source, lower, (_file, output) => assert.match(output, /\btry\b/));
 });
+
+
+test("native throws preserve terminating flow through async catch and finally", () => {
+  const source = `export async function request():Promise<number> {
+    try { return 42; }
+    catch (error) { throw error instanceof Error ? error : new Error("request failed"); }
+    finally { Math.abs(-1); }
+  }`;
+  withTransformedSource(source, lower, (_file, output) => {
+    assert.match(output, /LeekRaise/);
+    assert.match(output, /return unreachable\(\)/);
+    assert.match(output, /finally/);
+  });
+});
