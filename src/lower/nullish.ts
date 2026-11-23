@@ -223,23 +223,22 @@ export function lowerNullable(source: ts.SourceFile, checker: ts.TypeChecker, in
         ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Object | ts.TypeFlags.StringLike |
         ts.TypeFlags.NumberLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.BigIntLike
       )));
-      if (hasUndefined && hasReference && hasPrimitive && fullyTagged &&
-          node.right.kind === ts.SyntaxKind.NullKeyword && resultType) {
-        const representation = checker.typeToTypeNode(type, node, ts.NodeBuilderFlags.NoTruncation) ?? null;
-        if (representation) {
-          const cache = fresh();
-          scope.push(nativeVariable(cache, representation, null));
-          const left = ts.visitNode(node.left, visit, ts.isExpression) ?? node.left;
-          changed = true;
-          const selected = factory.createConditionalExpression(
-            factory.createBinaryExpression(cache, factory.createToken(ts.SyntaxKind.EqualsEqualsToken), factory.createNull()),
-            factory.createToken(ts.SyntaxKind.QuestionToken), factory.createNull(),
-            factory.createToken(ts.SyntaxKind.ColonToken), cache
-          );
-          return factory.createSatisfiesExpression(factory.createParenthesizedExpression(factory.createCommaListExpression([
-            factory.createAssignment(cache, left), selected
-          ])), resultType);
-        }
+      const taggedFallback = hasUndefined && hasReference && hasPrimitive && fullyTagged &&
+        node.right.kind === ts.SyntaxKind.NullKeyword && resultType !== null;
+      const representation = taggedFallback ? checker.typeToTypeNode(type, node, ts.NodeBuilderFlags.NoTruncation) ?? null : null;
+      if (taggedFallback && representation && resultType) {
+        const cache = fresh();
+        scope.push(nativeVariable(cache, representation, null));
+        const left = ts.visitNode(node.left, visit, ts.isExpression) ?? node.left;
+        changed = true;
+        const selected = factory.createConditionalExpression(
+          factory.createBinaryExpression(cache, factory.createToken(ts.SyntaxKind.EqualsEqualsToken), factory.createNull()),
+          factory.createToken(ts.SyntaxKind.QuestionToken), factory.createNull(),
+          factory.createToken(ts.SyntaxKind.ColonToken), cache
+        );
+        return factory.createSatisfiesExpression(factory.createParenthesizedExpression(factory.createCommaListExpression([
+          factory.createAssignment(cache, left), selected
+        ])), resultType);
       }
       const nullable = parts.some(part => Boolean(part.flags & ts.TypeFlags.Null));
       const undefinedReference = !nullable && parts.some(part => Boolean(part.flags & ts.TypeFlags.Undefined));
