@@ -6,7 +6,7 @@ import { required } from "../../baguette/src/required.ts";
 import { functionBody } from "./function-body.ts";
 import { identifiers } from "./names.ts";
 import { primitiveSnapshot, type PrimitiveRead } from "./primitive-read.ts";
-import { optionalComparison, optionalStringification } from "./comparison.ts";
+import { optionalComparison } from "./comparison.ts";
 import { nullTest, requiredCall, type RequiredCall } from "./required-calls.ts";
 
 export const requiredAliases = { LeekRequiredIndex: "i32" } as const;
@@ -108,8 +108,6 @@ export function lowerRequired(files: readonly ts.SourceFile[], checker: ts.TypeC
         };
         const comparison = scope && ts.isBinaryExpression(node) && !suspended(node) ? optionalComparison(node, checker, capture, temporary, expression) : null;
         if (comparison) { changed = true; return comparison; }
-        const stringified = scope && ts.isCallExpression(node) && !suspended(node) ? optionalStringification(node, checker, capture) : null;
-        if (stringified) { changed = true; return stringified; }
         const input = scope && ts.isCallExpression(node) && !suspended(node) ? requiredCall(node, checker) : null;
         if (!scope || !input || !fileNames.has(input.helper.getSourceFile())) return ts.visitEachChild(node, visit, context);
         const helperSource = input.helper.getSourceFile();

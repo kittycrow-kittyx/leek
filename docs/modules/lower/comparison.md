@@ -5,7 +5,3 @@
 The other operand must be null or the same native primitive family. Receiver, key, presence and value are captured in original evaluation order. A later operand can mutate the storage without changing an earlier read. A missing value compares equal only to null; stored zero, signed zero and NaN retain ordinary strict equality. No optional-value object is allocated.
 
 Loose equality, ordinary numeric arrays, numeric Map keys, nullable comparison operands and suspended expressions remain for further lowering. The enclosing immediate-consumer pass rejects suspension and provides the local temporaries. The Boolean `satisfies` annotation preserves the result type through Baguette's expression materialisation.
-
-`optionalStringification` rewrites global `String(typedArray[index] ?? null)`
-as a presence-checked string result. Missing indices yield `"null"`.
-Calls to a locally declared `String` retain their original form.
