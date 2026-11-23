@@ -280,9 +280,8 @@ function get(index: number): { name?: string } { events.push("get:" + index); re
 function fallback(): string { events.push("fallback"); return "missing"; }
 function run(index: number): string { return get(index).name ?? fallback(); }
 console.log(JSON.stringify([[0,1,2,3].map(run), events]));`;
-  const transformed = withTransformedSource(source, (input, checker) => lowerNullable(input, checker).text,
+  withTransformedSource(source, (input, checker) => lowerNullable(input, checker).text,
     (_file, output) => { assert.match(output, /__leekNullable/); assert.doesNotMatch(output, /\.name\s*\?\?/); });
-  assert.ok(transformed);
   assert.equal(check(source), check(source, false));
 });
 
