@@ -23,7 +23,7 @@ Standard `at(index)` defaults share indexed lowering. The index is truncated tow
 | `LeekArrayIndex = number` | `i32` |
 | `Uint8Array<ArrayBufferLike>` | `Uint8Array` |
 
-Bake handles selection for nullable identifiers. Undefined-only optional references (strings and objects) use a typed local and a nullish comparison. The left operand executes once, and the fallback is lazy. Optional primitives, mixed null/undefined unions, unresolved generics and expressions containing suspension retain their original form. Tests compare evaluation order with original TypeScript and exercise the compiled nullable path in WebAssembly.
+Undefined-only optional references (strings and objects) lower to a typed temporary and `== null` selection. Optional primitives, mixed null/undefined unions, unresolved generics and suspended expressions remain unchanged.
 
 BigInt64Array and BigUint64Array defaults use the same bounds and integrality guard as Number typed arrays, with a BigInt fallback. Reads retain 64-bit storage; missing elements never become a stored zero value.
 
