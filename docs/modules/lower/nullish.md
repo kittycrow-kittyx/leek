@@ -23,7 +23,7 @@ Standard `at(index)` defaults share indexed lowering. The index is truncated tow
 | `LeekArrayIndex = number` | `i32` |
 | `Uint8Array<ArrayBufferLike>` | `Uint8Array` |
 
-Undefined-only optional references (strings and objects) lower to a typed temporary and `== null` selection. Optional primitives, mixed null/undefined unions, unresolved generics and suspended expressions remain unchanged.
+Undefined-only optional references (strings and objects) lower to a typed temporary and `== null` selection. Tagged object-and-primitive unions use the same treatment for a literal `?? null` fallback. Optional primitive-only values, unresolved generics and suspended expressions remain unchanged.
 
 BigInt64Array and BigUint64Array defaults use the same bounds and integrality guard as Number typed arrays, with a BigInt fallback. Reads retain 64-bit storage; missing elements never become a stored zero value.
 

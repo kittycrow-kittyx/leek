@@ -310,3 +310,15 @@ function mixed(value: string | null | undefined): string { return value ?? "miss
     assert.equal(lowerNullable(input, program.getTypeChecker()).text, source);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("dynamic tagged record values distinguish missing keys from present numeric and object values", () => {
+  const input = `type Value = string | number | boolean | null | { kind: string };
+const events: string[] = [];
+const record: Record<string, Value | undefined> = { zero: 0, truth: false, empty: "", object: { kind: "ok" }, nil: null, missing: undefined };
+function read(key: string): Value | undefined { events.push(key); return record[key]; }
+function run(key: string): Value | null { return read(key) ?? null; }
+console.log(JSON.stringify([["zero","truth","empty","object","nil","missing","absent"].map(run),events]));`;
+  const lowered = compareTransformedExecution(input, (file, checker) => lowerNullable(file, checker).text);
+  assert.match(lowered.text, /__leekNullable/);
+  assert.doesNotMatch(lowered.text, /read\(key\)\s*\?\?\s*null/);
+});
