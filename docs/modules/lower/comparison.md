@@ -6,7 +6,6 @@ The other operand must be null or the same native primitive family. Receiver, ke
 
 Loose equality, ordinary numeric arrays, numeric Map keys, nullable comparison operands and suspended expressions remain for further lowering. The enclosing immediate-consumer pass rejects suspension and provides the local temporaries. The Boolean `satisfies` annotation preserves the result type through Baguette's expression materialisation.
 
-`optionalStringification(node, checker, capture)` lowers a standard global
-`String(typedArray[index] ?? null)` call using the same presence snapshot.
-It returns `"null"` when the index is missing and stringifies the actual
-Number or BigInt otherwise. A locally shadowed `String` is left unchanged.
+`optionalStringification` rewrites global `String(typedArray[index] ?? null)`
+as a presence-checked string result. Missing indices yield `"null"`.
+Calls to a locally declared `String` retain their original form.
