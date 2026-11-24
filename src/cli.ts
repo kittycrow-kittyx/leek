@@ -8,7 +8,7 @@ import { stageSource } from "./lower/index.ts";
 import { sourceEntry } from "./project.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const usage = "leek [--target=wasm|clang|rust] [--source PATH] [--entry PATH] [--validate-only]";
+const usage = "leek [--target=wasm|clang|rust] [--source PATH] [--entry PATH] [--out-dir PATH] [--validate-only]";
 const args = process.argv.slice(2);
 
 async function main(): Promise<void> {
@@ -16,7 +16,7 @@ async function main(): Promise<void> {
     console.log(usage);
     return;
   }
-  const { command, source: input, selected, entry, validateOnly } = options(args, process.cwd());
+  const { command, source: input, selected, entry, validateOnly, output } = options(args, process.cwd());
   const source = realpathSync(input);
   const original = sourceEntry(source, entry);
   const work = resolve(root, "build", selected);
@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   rmSync(work, { recursive: true, force: true });
   const staged = stageSource(source, original, work, selected !== "wasm");
   await build({
-    root, work, selected, input: staged,
+    root, work, selected, input: staged, output: output ?? resolve(root, "dist", selected),
     validateOnly: validateOnly || command === "analyse", emit: command === "compile"
   });
 }

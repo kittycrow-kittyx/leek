@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
+import { THISTLE_WASM_INITIAL_PAGES, THISTLE_WASM_MAXIMUM_PAGES } from "../mikuOS-thistle/thistle/src/core/kernel-memory.js";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -8,6 +10,7 @@ import binaryen from "binaryen";
 import { stageSource } from "../src/lower/index.ts";
 import { emitWasm } from "../src/wasm.ts";
 import { requirePin } from "../src/project.ts";
+import { linkWat } from "../src/wat.ts";
 import * as reference from "./fixtures/wasm.ts";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -36,7 +39,35 @@ function numericCases(): number[] {
   return values;
 }
 
+/** Compare native numeric operations and presence guards against source semantics at coercion and storage boundaries. */
 function checkNumbers(exports: WebAssembly.Exports): void {
+  assert.equal(call(exports, "nativeEnvironment"), 1, "native WASM uses the source fallback for absent browser capabilities");
+  const exceptions = { crossCallCatch: reference.crossCallCatch, crossCallRethrow: reference.crossCallRethrow,
+    nativeRangeCatch: reference.nativeRangeCatch, crossCallLoop: reference.crossCallLoop };
+  for (const [name, operation] of Object.entries(exceptions)) for (const input of [-5, -1, 0, 1, 5]) assert.equal(call(exports, name, input), operation(input));
+  for (let index = 0; index < 10000; index++) assert.equal(call(exports, "crossCallCatch", -1), -1, "exception unwinding restores GC roots");
+  for (let index = 0; index < 10000; index++) assert.throws(() => call(exports, "crossCallThrow", -1), "exported exceptions restore the native stack before reaching the host");
+  for (const value of [-7, 0, 1, 4, 12]) assert.equal(call(exports, "synchronousCapture", value), reference.synchronousCapture(value));
+  assert.equal(call(exports, "bigintLoop"), reference.bigintLoop());
+  assert.equal(call(exports, "mixedBufferViews"), reference.mixedBufferViews());
+  for (const offset of [0, -0.5, 0.5, 8, 8.5, 16, NaN]) for (const length of [0, 1, -0.5, 1.9, NaN]) assert.equal(call(exports, "bufferViewAlias", offset, length), reference.bufferViewAlias(offset, length));
+  for (const index of [-1, -0.5, -0, 0, 0.5, 1, 1.9, 2, 3, 4, 5, NaN, Infinity, -Infinity, 4294967296]) {
+    assert.equal(call(exports, "indexedCodePoint", index), reference.indexedCodePoint(index));
+    assert.equal(call(exports, "requiredCodePoint", index), reference.requiredCodePoint(index));
+    assert.equal(call(exports, "indexedBigInt", index), reference.indexedBigInt(index));
+    assert.equal(call(exports, "optionalWideEquality", index), reference.optionalWideEquality(index));
+    assert.equal(call(exports, "optionalPointEquality", index), reference.optionalPointEquality(index));
+    for (const value of [0, -0, NaN, 7]) assert.equal(call(exports, "optionalEquality", index, value), reference.optionalEquality(index, value));
+    for (const variant of [0, 1, 2, 3]) assert.equal(call(exports, "requiredBigInt", index, variant), reference.requiredBigInt(index, variant));
+  }
+  for (const present of [0, 1]) for (const selected of [0, 1]) {
+    assert.equal(call(exports, "nullablePredicate", present, selected), reference.nullablePredicate(present, selected));
+    assert.equal(call(exports, "predicateReceiver", present, selected), reference.predicateReceiver(present, selected));
+    for (const value of [0, -0, NaN, 7]) assert.equal(call(exports, "optionalMapEquality", present, value), reference.optionalMapEquality(present, value));
+  }
+  const caught = { localCaught: reference.localCaught, localReturn: reference.localReturn, localIgnored: reference.localIgnored, localNested: reference.localNested,
+    tailError: reference.tailError, otherTailError: reference.otherTailError, voidTailError: reference.voidTailError, inspectClosedError: reference.inspectClosedError };
+  for (const [name, operation] of Object.entries(caught)) for (const input of [-Infinity, -7, -1, -0, 0, 1, 4, Infinity, NaN]) assert.equal(call(exports, name, input), operation(input));
   const operations = { multiply: reference.multiply, xor: reference.xor, and: reference.and, or: reference.or,
     shl: reference.shl, shr: reference.shr, ushr: reference.ushr };
   const values = numericCases();
@@ -44,7 +75,34 @@ function checkNumbers(exports: WebAssembly.Exports): void {
     for (const a of values) for (const b of values) assert.equal(call(exports, name, a, b), operation(a, b), `${name}(${a}, ${b})`);
   }
   for (const value of values) assert.equal(call(exports, "predicates", value), reference.predicates(value));
+  for (const value of values) assert.equal(call(exports, "canonicalBindings", value), reference.canonicalBindings(value));
+  for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "mapDefault", present, value), reference.mapDefault(present, value));
+  for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "mapReferenceDefault", present, value), reference.mapReferenceDefault(present, value));
+  for (const value of values) for (const index of [-1, -0, 0, 0.5, 1, NaN, Infinity]) assert.equal(call(exports, "requiredNumber", index, value), reference.requiredNumber(index, value));
+  for (const value of values) for (const present of [0, 1]) assert.equal(call(exports, "requiredMap", present, value), reference.requiredMap(present, value));
+  for (const value of [0, 1]) assert.equal(call(exports, "nullableEffect", value), reference.nullableEffect(value));
+  for (const value of [0, 1]) assert.equal(call(exports, "removedReference", value), reference.removedReference(value));
+  const indexed = { indexedByte: reference.indexedByte, indexedString: reference.indexedString, indexedReference: reference.indexedReference, indexedObject: reference.indexedObject, indexedReadonly: reference.indexedReadonly, relativeReference: reference.relativeReference, relativeString: reference.relativeString };
+  for (const [name, operation] of Object.entries(indexed)) for (const value of [...values, 0, 0.5, 1, 2, 3, 4]) assert.equal(call(exports, name, value), operation(value), `${name}(${value})`);
   for (const [name, expected] of [["signedRead", -1], ["widerWrite", 1], ["assignmentResult", 0]] as const) assert.equal(call(exports, name), expected);
+}
+
+async function checkClosures(exports: WebAssembly.Exports): Promise<void> {
+  for (const input of [-1, 1]) {
+    assert.equal(call(exports, "beginFailure", input), reference.beginFailure(input), "rejection remains inside native task frames");
+    const task = reference.failureCompletion;
+    assert.ok(task);
+    if (input < 0) await assert.rejects(task, /native error/);
+    else await task;
+    assert.equal(call(exports, "failureResult"), reference.failureResult(), "rejected awaits cannot resume with default values");
+  }
+  for (const input of [-1, 0, 4, 7]) {
+    assert.equal(call(exports, "beginClosure", input), reference.beginClosure(input));
+    for (let step = 0; !reference.closureReady() && step < 100; step++) await Promise.resolve();
+    assert.equal(reference.closureReady(), 1);
+    assert.equal(call(exports, "closureReady"), 1);
+    assert.equal(call(exports, "closureValue"), reference.closureValue());
+  }
 }
 
 /** Byte setters and bulk views must address the same rooted array. Releasing
@@ -105,7 +163,7 @@ function checkInstructions(bytes: Uint8Array): void {
   } finally { module.dispose(); }
 }
 
-test("compiled WASM preserves numeric semantics, rooted buffers and native checksum instructions", { timeout: 120000 }, () => {
+test("compiled WASM preserves numeric semantics, native closures, rooted buffers and checksum instructions", { timeout: 120000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "leek-native-"));
   try {
     mkdirSync(join(root, "src"));
@@ -115,12 +173,49 @@ test("compiled WASM preserves numeric semantics, rooted buffers and native check
     const input = stageSource(root, entry, join(root, "work"), false);
     emitWasm(requirePin(repository, "baguette"), input, join(root, "output"));
     const bytes = readFileSync(join(root, "output", "leek.wasm"));
+    const linked = join(root, "linked.wat");
+    writeFileSync(linked, linkWat(join(root, "output/wat/leek/layout.json")));
+    const rebuilt = join(root, "rebuilt.wasm");
+    execFileSync(process.execPath, [join(repository, "baguette/node_modules/.bin/wasm-opt"), linked,
+      "-O3", "--all-features", "--strip-debug", "-o", rebuilt]);
+    assert.deepEqual(readFileSync(rebuilt), bytes, "independent modular WAT compilation reproduces Baguette's reference binary");
     const memory = new WebAssembly.Memory({ initial: 1024, maximum: 32768 });
     const module = new WebAssembly.Module(bytes);
     assert.deepEqual(WebAssembly.Module.imports(module).map(item => item.module + "." + item.name).sort(), ["env.abort", "env.memory"]);
     const instance = new WebAssembly.Instance(module, { env: { memory, abort: () => { throw new Error("Native abort"); } } });
     checkNumbers(instance.exports);
+    await checkClosures(instance.exports);
     checkBytes(instance.exports, memory);
     checkInstructions(bytes);
+    for (const [offset, length] of [[1, 1], [-1, 1], [0, -1], [8, 4], [Infinity, 0], [0, Infinity], [0, 536870912], [4294967296, 0]] as const) {
+      assert.throws(() => reference.bufferViewLength(offset, length), RangeError);
+      assert.throws(() => call(instance.exports, "bufferViewLength", offset, length));
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test("Leek preserves and builds the pinned native Thistle kernel through inherited Teto intrinsics", { timeout: 120000 }, () => {
+  const root = mkdtempSync(join(tmpdir(), "leek-thistle-"));
+  try {
+    const canonical = join(repository, "mikuOS-thistle/thistle");
+    const entry = join(canonical, "src/native/kernel.ts");
+    const original = readFileSync(entry, "utf8");
+    const input = stageSource(canonical, entry, join(root, "work"), false);
+    emitWasm(requirePin(repository, "baguette"), input, join(root, "output"));
+    assert.equal(readFileSync(input.entry, "utf8"), original, "native kernel source reaches Bake without Leek's JavaScript numeric rewrites");
+    assert.equal(readFileSync(entry, "utf8"), original);
+    const bytes = readFileSync(join(root, "output/leek.wasm"));
+    const linked = join(root, "linked.wat"), rebuilt = join(root, "rebuilt.wasm");
+    writeFileSync(linked, linkWat(join(root, "output/wat/leek/layout.json")));
+    execFileSync(process.execPath, [join(repository, "baguette/node_modules/.bin/wasm-opt"), linked,
+      "-O3", "--all-features", "--strip-debug", "-o", rebuilt]);
+    assert.deepEqual(readFileSync(rebuilt), bytes);
+    const memory = new WebAssembly.Memory({ initial: THISTLE_WASM_INITIAL_PAGES, maximum: THISTLE_WASM_MAXIMUM_PAGES });
+    const module = new WebAssembly.Module(bytes);
+    assert.deepEqual(WebAssembly.Module.imports(module).map(item => item.module + "." + item.name), ["env.memory"]);
+    const instance = new WebAssembly.Instance(module, { env: { memory } });
+    assert.equal(call(instance.exports, "thistleKernelInit", 0, 1, 0), 0);
+    assert.equal(call(instance.exports, "thistleKernelValid", 0), 1);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

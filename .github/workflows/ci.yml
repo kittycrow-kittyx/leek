@@ -2,12 +2,15 @@ name: Transpiler validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'refactor/**']
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  ORT_DISABLE_TELEMETRY: '1'
 
 jobs:
   validate:
@@ -39,3 +42,20 @@ jobs:
           if-no-files-found: ignore
       - name: Test transpiler
         run: bun run test
+      - name: Canonical mikuOS transpilation diagnostic
+        run: |
+          set +e
+          bun src/cli.ts --target=wasm --source ./mikuOS-thistle --out-dir ./build/canonical-attempt > canonical-transpilation.log 2>&1
+          status=$?
+          cat canonical-transpilation.log
+          echo "Canonical transpilation exit status: $status"
+          exit 0
+      - name: Upload canonical transpilation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: canonical-mikuos-diagnostics
+          path: |
+            canonical-transpilation.log
+            build/wasm/**/bake-report.json
+          if-no-files-found: ignore
